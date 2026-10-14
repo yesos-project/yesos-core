@@ -278,8 +278,15 @@ Modules     vault [status|init|unlock|lock|passwd]   pkg [list|install|run|remov
 - The RedSea directory holds 16384 entries in total.
 - Without Zkr (e.g. JH7110) keys come from a weak source, and the system says so.
 
-## 8. License
+## 8. Support YesOS
 
+YesOS is developed in the open and funded by donations. They pay for
+development time and for real RISC-V boards, so the missing storage and
+network drivers can be written and tested outside the emulator.
+
+[Donate on Liberapay](https://liberapay.com/yesos-project/donate)
+
+## 9. License
 MIT. In memory of Terry A. Davis (1969–2018).
 
 YesOS is inspired by his TempleOS (its HolyC became HolyQ here, and the RedSea
