@@ -3,5 +3,5 @@ ID=org.yesos.synth
 EXEC=MAIN.HQ
 ICON=SYNTH
 VERSION=1.0.0
-AUTHOR=Terry & Reinaldo
-DESC=HolyQ EML Phase Synthesizer
+AUTHOR=YesOS Project
+DESC=Demo package: print, beep and sleep RPCs from a cell

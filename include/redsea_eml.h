@@ -141,7 +141,7 @@ U64  redsea_eml_get_free_sectors(U0);
 U64  redsea_eml_get_largest_free_extent(U0);
 Bool redsea_eml_test_free_extent(U0);
 
-// Hierarchical Directory & Path-based API (TempleOS Sacred Subdirectories)
+// Hierarchical Directory & Path-based API (TempleOS-style subdirectories)
 Bool redsea_eml_mkdir(const char* dir_path);
 Bool redsea_eml_write_file_path(const char* path, const void* data, size_t size, U32 flags);
 U8*  redsea_eml_read_file_path(const char* path, size_t* out_size);

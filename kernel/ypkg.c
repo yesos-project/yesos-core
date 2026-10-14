@@ -68,7 +68,7 @@ Bool ypkg_install_from_memory(const U8* pkg_data, size_t total_size) {
         return FALSE;
     }
 
-    kprintf("\n================ [ YESOS SACRED PACKAGE INSTALLER ] ================\n");
+    kprintf("\n================ [ YESOS PACKAGE INSTALLER ] ================\n");
     kprintf("Package Name       : '%s'\n", hdr->app_name);
     kprintf("Bundle ID          : '%s'\n", hdr->bundle_id);
     kprintf("Version            : %s  (by %s)\n", hdr->version_str, hdr->author);

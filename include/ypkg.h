@@ -3,7 +3,7 @@
 
 #include "types.h"
 
-#define YPKG_MAGIC       0x59504B47  // "YPKG" (YesOS Sacred Package)
+#define YPKG_MAGIC       0x59504B47  // "YPKG" (YesOS package)
 #define YPKG_VERSION     1
 
 #define YPKG_MAX_FILES   32

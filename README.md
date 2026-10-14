@@ -281,3 +281,6 @@ Modules     vault [status|init|unlock|lock|passwd]   pkg [list|install|run|remov
 ## 8. License
 
 MIT. In memory of Terry A. Davis (1969–2018).
+
+YesOS is inspired by his TempleOS (its HolyC became HolyQ here, and the RedSea
+filesystem) and is not affiliated with it.

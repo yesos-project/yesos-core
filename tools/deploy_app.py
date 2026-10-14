@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 =============================================================================
-YesOS 2.0 - Sacred Package (.YPK) Builder & Hot Deployment Tool
+YesOS 2.0 - Package (.YPK) Builder & Hot Deployment Tool
 Enables local application packing and direct GitHub repository deployment over
 VirtIO-Net / UDP 5555 into RedSea-EML and Holy Dock.
 =============================================================================
@@ -250,7 +250,7 @@ def deploy_from_github(github_url: str, target_ip="127.0.0.1", target_port=5555)
     return send_package_to_yesos(ypk_bytes, target_ip, target_port)
 
 def main():
-    parser = argparse.ArgumentParser(description="YesOS Sacred Application Deployment Tool")
+    parser = argparse.ArgumentParser(description="YesOS Application Deployment Tool")
     parser.add_argument("--build", help="App directory to package into .YPK")
     parser.add_argument("-o", "--output", help="Output .YPK file path")
     parser.add_argument("--send", help="Send existing .YPK file to YesOS")

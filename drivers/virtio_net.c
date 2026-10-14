@@ -536,7 +536,7 @@ Bool virtio_net_send_raw(const void* frame, size_t len) {
     VirtIONetDev* dev = &g_net_dev;
     if (!dev->is_initialized || len == 0 || len > ETH_MAX_FRAME_SIZE) return FALSE;
 
-    // Temple Sanctuary Air-Gap: Intercept and abort any packet bound for WAN/Internet
+    // LAN-only firewall: abort any packet bound for the Internet
     if (len >= sizeof(EthHeader) + sizeof(IPv4Header)) {
         const EthHeader* eth = (const EthHeader*)frame;
         if (ntohs(eth->ethertype) == ETH_TYPE_IPV4) {
@@ -879,7 +879,7 @@ static U0 net_handle_packet(const uint8_t* packet, size_t len) {
         if (len < sizeof(EthHeader) + sizeof(IPv4Header)) return;
         const IPv4Header* ip = (const IPv4Header*)(packet + sizeof(EthHeader));
 
-        // Temple Sanctuary Air-Gap: Drop any incoming packet originating from outside the local LAN
+        // LAN-only firewall: drop any incoming packet from outside the local LAN
         if (!firewall_filter_incoming(ntohl(ip->src_ip))) {
             return;
         }
@@ -1085,10 +1085,9 @@ Bool net_ping(const char* ip_str, U32 count) {
     char target_str[20];
     net_format_ip(target_ip, target_str, sizeof(target_str));
 
-    // Temple Sanctuary Air-Gap Check
+    // LAN-only firewall
     if (!firewall_is_lan_ip(target_ip)) {
-        kprintf("\n[SANCTUARY AIR-GAP] Target %s is on the public WAN/Internet.\n", target_str);
-        kprintf("[SANCTUARY] Terry Davis Sanctum: Outbound Internet traffic is forbidden. YesOS is a Home Temple.\n\n");
+        kprintf("\n[FIREWALL] %s is on the Internet: outbound traffic is blocked (private LAN only).\n\n", target_str);
         return FALSE;
     }
 

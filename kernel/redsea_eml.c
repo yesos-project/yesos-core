@@ -1228,7 +1228,7 @@ Bool redsea_eml_test_free_extent(U0) {
 }
 
 // ----------------------------------------------------------------------------
-// Hierarchical Directory & Path-based Operations (TempleOS Sacred Subdirectories)
+// Hierarchical Directory & Path-based Operations (TempleOS-style subdirectories)
 // ----------------------------------------------------------------------------
 
 Bool redsea_eml_mkdir(const char* dir_path) {
@@ -1287,7 +1287,7 @@ Bool redsea_eml_mkdir(const char* dir_path) {
     MemCpy(sb_buf, &g_vol.sb, sizeof(RedSeaSuperblock));
     ata_write_sectors(g_vol.drive, 1, 1, sb_buf);
 
-    kprintf("[RedSea-EML] Created sacred directory '%s' at LBA %u (Free-Extent allocated)\n", clean_path, (U32)start_lba);
+    kprintf("[RedSea-EML] Created directory '%s' at LBA %u (Free-Extent allocated)\n", clean_path, (U32)start_lba);
     return TRUE;
 }
 
