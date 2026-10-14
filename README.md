@@ -76,13 +76,20 @@ In this repository, `make` builds the core self-test image (core + vault +
 packages + dns, `selftest/`) and `make test` runs the core's suites on it:
 
 ```bash
-sudo apt install -y clang lld qemu-system-misc python3 python3-cryptography
+git clone https://github.com/yesos-project/yesos-core && cd yesos-core
+sudo apt install -y git make clang lld llvm qemu-system-misc python3 python3-venv python3-cryptography
+#   Arch: sudo pacman -S git make clang lld llvm qemu-system-riscv python python-cryptography
+# Rust from https://rustup.rs, then:
 rustup target add riscv64gc-unknown-none-elf
 make prover-setup        # once: Z3 in tools/.venv
 make                     # yesos.elf: links, proves the PMP layout, checks the key hart, hashes the image
 make test                # test_pmp, test_cells, test_integrity, test_packages, test_dns, test_timer
 make run                 # serial console in the terminal (Ctrl-A X to quit)
 ```
+
+Tested with clang 23, QEMU 11.1, Rust 1.99 and Python 3.14. The QEMU CPU must
+support RVV 1.0 and Zkr (`-cpu rv64,v=true,vext_spec=v1.0,zkr=true`), so an old
+distribution QEMU may be too old.
 
 ## 3. Security architecture
 
