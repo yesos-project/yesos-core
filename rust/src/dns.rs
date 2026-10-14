@@ -848,47 +848,47 @@ impl Dns {
     // -- configuration --------------------------------------------------
 
     fn set_custom(&mut self, allow: bool, name: &[u8], add: bool) -> Result<String, (i32, String)> {
-        let d = norm_domain(name).ok_or((400, String::from("Dominio no válido (ejemplo: ads.ejemplo.com).")))?;
+        let d = norm_domain(name).ok_or((400, String::from("Invalid domain (example: ads.example.com).")))?;
         let d = String::from_utf8(d).unwrap_or_default();
-        let which = if allow { "permitidos" } else { "bloqueados" };
+        let which = if allow { "the allowlist" } else { "the blocklist" };
         let v = if allow { &mut self.allow } else { &mut self.block };
         let pos = v.iter().position(|x| *x == d);
         if add {
             if pos.is_some() {
-                return Err((409, alloc::format!("'{}' ya está en {}.", d, which)));
+                return Err((409, alloc::format!("'{}' is already in {}.", d, which)));
             }
             if v.len() >= MAX_CUSTOM {
-                return Err((409, alloc::format!("Máximo {} dominios {}.", MAX_CUSTOM, which)));
+                return Err((409, alloc::format!("At most {} domains in {}.", MAX_CUSTOM, which)));
             }
             v.push(d.clone());
             v.sort();
         } else {
             match pos {
                 Some(p) => { v.remove(p); }
-                None => return Err((404, alloc::format!("'{}' no está en {}.", d, which))),
+                None => return Err((404, alloc::format!("'{}' is not in {}.", d, which))),
             }
         }
         self.ensure_key();
         let key = self.key;
         if allow { self.allow_h = sorted_hashes(key, &self.allow) } else { self.block_h = sorted_hashes(key, &self.block) }
-        Ok(alloc::format!("'{}' {} {}.", d, if add { "añadido a" } else { "quitado de" }, which))
+        Ok(alloc::format!("'{}' {} {}.", d, if add { "added to" } else { "removed from" }, which))
     }
 
     fn set_upstreams(&mut self, value: &[u8]) -> Result<String, (i32, String)> {
         let mut ups = Vec::new();
         for tok in value.split(|&c| c == b' ' || c == b',').filter(|t| !t.is_empty()) {
             let (ip, port) = parse_endpoint(tok)
-                .ok_or((400, String::from("Servidor no válido: usa IP o IP:puerto (por ejemplo 192.168.1.1).")))?;
+                .ok_or((400, String::from("Invalid server: use IP or IP:port (for example 192.168.1.1).")))?;
             if !is_private(ip) {
-                return Err((400, String::from("El cortafuegos air-gap no permite servidores DNS en Internet: usa uno de tu LAN (por ejemplo tu router).")));
+                return Err((400, String::from("The air-gap firewall does not allow DNS servers on the Internet: use one on your LAN (for example your router).")));
             }
             if ups.len() >= MAX_UPSTREAMS {
-                return Err((400, alloc::format!("Máximo {} servidores.", MAX_UPSTREAMS)));
+                return Err((400, alloc::format!("At most {} servers.", MAX_UPSTREAMS)));
             }
             ups.push((ip, port));
         }
         if ups.is_empty() {
-            return Err((400, String::from("Indica al menos un servidor DNS.")));
+            return Err((400, String::from("Give at least one DNS server.")));
         }
         self.upstreams = ups;
         self.upstream_auto = false;
@@ -1326,28 +1326,28 @@ pub extern "C" fn yc_dns_action(action: *const u8, name: *const u8, value: *cons
     let r: Result<String, (i32, String)> = DNS.with(|d| match action {
         b"dns_enable" if on || off => {
             d.enabled = on;
-            Ok(String::from(if on { "Bloqueo DNS activado." } else { "Bloqueo DNS desactivado: el NAS sigue resolviendo nombres sin filtrar." }))
+            Ok(String::from(if on { "DNS blocking enabled." } else { "DNS blocking disabled: names are still resolved, without filtering." }))
         }
         b"dns_doh" if on || off => {
             d.doh = on;
-            Ok(String::from(if on { "Se bloquean los servidores de DNS cifrado conocidos." } else { "Ya no se bloquean los servidores de DNS cifrado." }))
+            Ok(String::from(if on { "Known encrypted DNS servers are blocked." } else { "Encrypted DNS servers are no longer blocked." }))
         }
         b"dns_log" if on || off => {
             d.log_on = on;
             if off { d.log.clear(); }
-            Ok(String::from(if on { "Registro de consultas activado (solo en memoria)." } else { "Registro de consultas desactivado y borrado." }))
+            Ok(String::from(if on { "Query log enabled (in memory only)." } else { "Query log disabled and cleared." }))
         }
         b"dns_log" if value == b"clear" => {
             d.log.clear();
-            Ok(String::from("Registro de consultas borrado."))
+            Ok(String::from("Query log cleared."))
         }
         b"dns_cache_clear" => {
             d.cache.clear();
-            Ok(String::from("Caché DNS vaciada."))
+            Ok(String::from("DNS cache cleared."))
         }
         b"dns_upstreams" if value == b"auto" => {
             d.upstream_auto = true;
-            Ok(String::from("Servidor DNS automático: la puerta de enlace de la red."))
+            Ok(String::from("Automatic DNS server: the network gateway."))
         }
         b"dns_upstreams" => d.set_upstreams(value),
         b"dns_allow" | b"dns_block" if value == b"add" || value == b"del" => d.set_custom(action == b"dns_allow", name, value == b"add"),
@@ -1356,36 +1356,36 @@ pub extern "C" fn yc_dns_action(action: *const u8, name: *const u8, value: *cons
                 l.enabled = on;
                 let n = l.name.clone();
                 d.cache.clear();
-                Ok(alloc::format!("Lista '{}' {}.", n, if on { "activada" } else { "desactivada" }))
+                Ok(alloc::format!("List '{}' {}.", n, if on { "enabled" } else { "disabled" }))
             }
-            None => Err((404, String::from("No existe esa lista."))),
+            None => Err((404, String::from("No such list."))),
         },
         b"dns_test" => {
-            let Some(n) = norm_domain(name) else { return Err((400, String::from("Dominio no válido."))) };
+            let Some(n) = norm_domain(name) else { return Err((400, String::from("Invalid domain."))) };
             d.ensure_key();
             let ns = core::str::from_utf8(&n).unwrap_or("?");
             if n == CANARY {
-                return Ok(alloc::format!("'{}': bloqueado (señal para que Firefox no use su DNS cifrado).", ns));
+                return Ok(alloc::format!("'{}': blocked (the signal that tells Firefox not to use its encrypted DNS).", ns));
             }
             let (blocked, src) = d.verdict(&n);
             Ok(if blocked {
                 let by = match src {
-                    SRC_CUSTOM => String::from("tus dominios bloqueados"),
-                    SRC_DOH => String::from("la lista de DNS cifrado"),
-                    _ => alloc::format!("la lista '{}'", d.src_name(src)),
+                    SRC_CUSTOM => String::from("your blocked domains"),
+                    SRC_DOH => String::from("the encrypted DNS list"),
+                    _ => alloc::format!("the list '{}'", d.src_name(src)),
                 };
                 if d.enabled {
-                    alloc::format!("'{}': BLOQUEADO por {}.", ns, by)
+                    alloc::format!("'{}': BLOCKED by {}.", ns, by)
                 } else {
-                    alloc::format!("'{}': lo bloquearía {}, pero el filtro está desactivado.", ns, by)
+                    alloc::format!("'{}': {} would block it, but the filter is disabled.", ns, by)
                 }
             } else if src == SRC_CUSTOM {
-                alloc::format!("'{}': permitido (tu lista blanca).", ns)
+                alloc::format!("'{}': allowed (your allowlist).", ns)
             } else {
-                alloc::format!("'{}': no está bloqueado.", ns)
+                alloc::format!("'{}': not blocked.", ns)
             })
         }
-        _ => Err((400, String::from("Acción o valor no válido."))),
+        _ => Err((400, String::from("Invalid action or value."))),
     });
     let (code, text) = match r {
         Ok(t) => (200, t),

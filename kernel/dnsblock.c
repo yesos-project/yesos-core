@@ -92,21 +92,21 @@ Bool dnsblock_udp(U32 src_ip, const U8* src_mac, U16 src_port, U16 dst_port, con
 I32 dnsblock_action(const char* action, const char* name, const char* value, char* msg, size_t msg_max) {
     if (StrCmp(action, "dns_list_delete") == 0) {
         if (yc_dns_list_remove(name) != 0) {
-            ksnprintf(msg, msg_max, "No existe esa lista.");
+            ksnprintf(msg, msg_max, "No such list.");
             return 404;
         }
         char path[64];
         list_file(name, path, sizeof(path));
         redsea_eml_delete_file(path);
         save_config();
-        ksnprintf(msg, msg_max, "Lista '%s' eliminada.", name);
+        ksnprintf(msg, msg_max, "List '%s' deleted.", name);
         return 200;
     }
     I32 st = yc_dns_action(action, name, value, msg, msg_max);
     if (st == 200 && StrCmp(action, "dns_upstreams") == 0) dnsblock_refresh_upstream();
     if (st == 200 && StrCmp(action, "dns_test") != 0 && StrCmp(action, "dns_cache_clear") != 0) {
         if (!save_config()) {
-            ksnprintf(msg, msg_max, "Cambio aplicado, pero no se pudo guardar en el disco.");
+            ksnprintf(msg, msg_max, "Change applied, but it could not be saved to disk.");
             return 507;
         }
     }
@@ -115,20 +115,20 @@ I32 dnsblock_action(const char* action, const char* name, const char* value, cha
 
 I32 dnsblock_list_store(const char* name, const U8* data, size_t len, char* msg, size_t msg_max) {
     if (len > 16 * 1024 * 1024) {
-        ksnprintf(msg, msg_max, "Lista demasiado grande (máximo 16 MiB).");
+        ksnprintf(msg, msg_max, "List too large (16 MiB at most).");
         return 400;
     }
     I32 n = yc_dns_list_load(name, data, len, TRUE);
     if (n == -1) {
-        ksnprintf(msg, msg_max, "Nombre no válido: 1-32 caracteres a-z, 0-9, - o _.");
+        ksnprintf(msg, msg_max, "Invalid name: 1-32 characters a-z, 0-9, - or _.");
         return 400;
     }
     if (n == -2) {
-        ksnprintf(msg, msg_max, "Máximo 8 listas: elimina una antes.");
+        ksnprintf(msg, msg_max, "At most 8 lists: delete one first.");
         return 409;
     }
     if (n == 0) {
-        ksnprintf(msg, msg_max, "El archivo no contiene dominios válidos (formato hosts o uno por línea).");
+        ksnprintf(msg, msg_max, "The file has no valid domains (hosts format or one per line).");
         return 400;
     }
     char path[64];
@@ -136,12 +136,12 @@ I32 dnsblock_list_store(const char* name, const U8* data, size_t len, char* msg,
     if (!redsea_eml_write_file(path, data, len, 0)) {
         yc_dns_list_remove(name);
         save_config();
-        ksnprintf(msg, msg_max, "No se pudo guardar la lista en el disco.");
+        ksnprintf(msg, msg_max, "The list could not be saved to disk.");
         return 507;
     }
     save_config();
     kprintf("[DNS] list '%s' loaded: %d domains\n", name, n);
-    ksnprintf(msg, msg_max, "Lista '%s' cargada: %d dominios.", name, n);
+    ksnprintf(msg, msg_max, "List '%s' loaded: %d domains.", name, n);
     return 200;
 }
 

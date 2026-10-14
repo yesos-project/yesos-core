@@ -484,16 +484,16 @@ U0 shell_execute_command(const char* cmd) {
         if (*sub == '\0' || StrCmp(sub, "status") == 0) {
             SecurityPinState* ps = security_pin_get_state();
             kprintf("\n================ [ PHYSICAL CONSOLE SECURITY PIN ] ================\n");
-            kprintf("  Vault Status:      %s\n", ps->is_locked ? "LOCKED (Air-Gap Protection Active)" : "UNLOCKED (Normal Console)");
+            kprintf("  Console Lock:      %s\n", ps->is_locked ? "LOCKED (Master PIN required)" : "UNLOCKED");
             kprintf("  Failed Attempts:   %u / %u\n", ps->failed_attempts, PIN_MAX_FAILED);
             kprintf("  Penalty Lockout:   %s\n", security_pin_is_in_lockout() ? "ACTIVE (30s Cooldown)" : "INACTIVE");
             kprintf("  Config Storage:    SYS/PIN.CFG (RedSea / RamFS Persistent)\n");
             kprintf("  Hash Verification: Argon2id (8 MiB, t=3) + 128-bit salt\n");
-            kprintf("\n  Cambiar Master PIN / Contraseña:\n");
-            kprintf("    pin set <nuevo_6_digitos>         - Cambia el PIN maestro (ej: pin set 654321)\n");
-            kprintf("    pin change <actual> <nuevo>       - Cambia el PIN verificando el actual\n");
-            kprintf("    passwd <nuevo_6_digitos>          - Alias directo para cambiar contrasena\n");
-            kprintf("    lock                              - Bloquea la consola serie (pide el PIN)\n");
+            kprintf("\n  Change the Master PIN:\n");
+            kprintf("    pin set <new_6_digits>            - Set the Master PIN (e.g. pin set 654321)\n");
+            kprintf("    pin change <current> <new>        - Change the PIN, checking the current one\n");
+            kprintf("    passwd <new_6_digits>             - Same as pin set\n");
+            kprintf("    lock                              - Lock the serial console (asks for the PIN)\n");
             kprintf("===================================================================\n");
             speaker_event(BEEP_SUCCESS);
         } else if (StrNCmp(sub, "set ", 4) == 0 || StrNCmp(sub, "change ", 7) == 0) {
@@ -514,7 +514,7 @@ U0 shell_execute_command(const char* cmd) {
             } else if (p1[0] != '\0') {
                 security_pin_change(NULL, p1);
             } else {
-                kprintf("Uso: pin set <nuevo_6_digitos>  o  pin change <actual> <nuevo_6_digitos>\n");
+                kprintf("Usage: pin set <new_6_digits>  or  pin change <current> <new_6_digits>\n");
             }
         } else if (StrNCmp(sub, "unlock ", 7) == 0) {
             const char* test_pin = sub + 7;
@@ -528,8 +528,8 @@ U0 shell_execute_command(const char* cmd) {
                 security_pin_change(NULL, sub);
             }
         } else {
-            kprintf("Uso: pin [status | set <6-dig> | change <actual> <nuevo> | unlock <6-dig>]\n");
-            kprintf("     passwd <nuevo_6_digitos>\n");
+            kprintf("Usage: pin [status | set <6-dig> | change <current> <new> | unlock <6-dig>]\n");
+            kprintf("       passwd <new_6_digits>\n");
         }
     } else if (StrNCmp(cmd, "firewall", 8) == 0) {
         const char* sub = cmd + 8;

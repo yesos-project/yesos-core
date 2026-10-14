@@ -146,10 +146,10 @@ def main():
 
             # --- lists ----------------------------------------------------
             check("error" in console(vm, "dns list add Bad_Name!"), "bad list name refused")
-            check("no contiene dominios" in console(vm, "dns list add empty"), "list without domains refused")
+            check("no valid domains" in console(vm, "dns list add empty"), "list without domains refused")
             check("error" in console(vm, "dns list add missing"), "a list that is not on the disk is reported")
             r = console(vm, "dns list add test")
-            check("6 dominios" in r, f"list loaded: exactly the 6 valid domains parsed ({r.strip()[-60:]})")
+            check("6 domains" in r, f"list loaded: exactly the 6 valid domains parsed ({r.strip()[-60:]})")
             before = len(up.seen)
             check(addr(ask(dns_port, "ads.blocked.test")) == ["0.0.0.0"], "listed domain blocked with 0.0.0.0")
             check(addr(ask(dns_port, "deep.sub.ads.blocked.test")) == ["0.0.0.0"], "subdomain of a listed domain blocked")
@@ -165,9 +165,9 @@ def main():
             console(vm, "dns allow good.ads.blocked.test")
             check(addr(ask(dns_port, "good.ads.blocked.test")) == ["10.9.9.9"], "allowlist wins over the list")
             r = console(vm, "dns test good.ads.blocked.test")
-            check("permitido" in r, "dns test: allowlist reported")
+            check("allowed" in r, "dns test: allowlist reported")
             r = console(vm, "dns test x.ads.blocked.test")
-            check("BLOQUEADO" in r and "'test'" in r, "dns test: names the list that blocks")
+            check("BLOCKED" in r and "'test'" in r, "dns test: names the list that blocks")
             console(vm, "dns block mine.example")
             check(addr(ask(dns_port, "mine.example")) == ["0.0.0.0"], "personal block list")
             check("error" in console(vm, "dns block not_a_domain"), "invalid domain refused")
@@ -238,7 +238,7 @@ def main():
             t0 = time.time()
             r = console(vm, "dns list add big", 4)
             el = time.time() - t0
-            check("100000 dominios" in r, f"100,000-domain list ({len(big) // 1024} KiB) loaded")
+            check("100000 domains" in r, f"100,000-domain list ({len(big) // 1024} KiB) loaded")
             check(addr(ask(dns_port, f"bulk99999.ads{99999 % 97}.example")) == ["0.0.0.0"], "lookup in the big list")
         finally:
             vm.stop()
@@ -253,7 +253,7 @@ def main():
                   and addr(ask(dns_port, "dns.google")) == ["0.0.0.0"] and addr(ask(dns_port, "good.ads.blocked.test")) == ["10.9.9.9"],
                   "lists, block and allow lists, DoH setting and upstream kept")
             r = console(vm, "dns list delete big")
-            check("eliminada" in r and addr(ask(dns_port, "bulk7.ads7.example")) != ["0.0.0.0"], "list deleted: it no longer blocks")
+            check("deleted" in r and addr(ask(dns_port, "bulk7.ads7.example")) != ["0.0.0.0"], "list deleted: it no longer blocks")
             # rate limit last: it locks this client out for a minute
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             for i in range(1100):

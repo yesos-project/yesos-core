@@ -27,14 +27,17 @@ WATCHED = [b"DOES NOT MATCH", b"could not arm", b"INTEGRITY", b"YesOS ["]
 
 
 def rodata_probe_offset(elf):
-    """An offset inside .rodata, at least 1 KiB away from every watched message."""
+    """An offset inside .rodata, in the middle of a text string (never a pointer
+    or jump table, which would crash the code that uses it), at least 1 KiB away
+    from every watched message."""
     sections = subprocess.run(["llvm-readelf", "-S", "-W", elf], capture_output=True, text=True).stdout
     fields = next(l.split() for l in sections.splitlines() if " .rodata " in l)
     i = fields.index(".rodata")
     off, size = int(fields[i + 3], 16), int(fields[i + 4], 16)
     data = open(elf, "rb").read()[off:off + size]
     hits = [m.start() for w in WATCHED for m in re.finditer(re.escape(w), data)]
-    for cand in range(0x10000, size - 64, 0x400):
+    for run in re.finditer(rb"[\x20-\x7e]{64,}", data[0x10000:]):
+        cand = 0x10000 + (run.start() + run.end()) // 2
         if all(abs(cand - h) > 1024 for h in hits):
             return cand
     raise RuntimeError("no safe .rodata probe offset")
