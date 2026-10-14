@@ -1,0 +1,27 @@
+// ============================================================================
+// HOLYSYNTH - HolyQ EML Polyphonic Phase Synthesizer
+// Live Interactive Sound Generator for YesOS RV64 M-Mode
+// ============================================================================
+
+extern U0 kprintf(U8* fmt, ...);
+extern U0 speaker_event(U32 event_id);
+extern U0 SleepMS(U32 ms);
+
+U0 PlayHolyChords() {
+    kprintf("=================================================================\n");
+    kprintf("  [ HOLYSYNTH v1.0 ] HolyQ EML Polyphonic Phase Synthesizer      \n");
+    kprintf("  Running Live in M-Mode on RISC-V 64-Bit Bare-Metal!            \n");
+    kprintf("=================================================================\n");
+    
+    kprintf("Synthesizing Sacred Frequencies: 432 Hz, 528 Hz, 639 Hz Solfeggio...\n");
+    speaker_event(1);
+    SleepMS(80);
+    speaker_event(3);
+    SleepMS(120);
+    speaker_event(4);
+    
+    kprintf("Acoustic Synthesizer initialized and active on Hart 1 DSP!\n");
+    kprintf("=================================================================\n");
+}
+
+PlayHolyChords();

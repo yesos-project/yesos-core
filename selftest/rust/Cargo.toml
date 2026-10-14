@@ -1,0 +1,18 @@
+[package]
+name = "yesos"
+version = "0.1.0"
+edition = "2021"
+description = "YesOS core self-test image - Rust part (the core only)"
+
+[lib]
+name = "yesos"
+crate-type = ["staticlib"]
+
+[profile.release]
+opt-level = 3
+lto = true
+panic = "abort"
+codegen-units = 1
+
+[dependencies]
+yesos_core = { path = "../../rust", features = ["dns"] }

@@ -1,0 +1,24 @@
+[package]
+name = "yesos_core"
+version = "0.1.0"
+edition = "2021"
+description = "YesOS core: kernel allocator, panic handler, crypto + DRBG, packet filter, entropy; optional DNS filter engine"
+
+# Linked into each product's staticlib (yesos-nas, yesos-security, yesos-desktop).
+[lib]
+name = "yesos_core"
+crate-type = ["rlib"]
+
+[dependencies]
+argon2 = { version = "0.5", default-features = false }
+blake2 = { version = "0.10", default-features = false }
+chacha20 = { version = "0.9", default-features = false }
+chacha20poly1305 = { version = "0.10", default-features = false }
+poly1305 = { version = "0.8", default-features = false }
+zeroize = { version = "1", default-features = false }
+
+[features]
+default = []
+dns = []          # DNS filter engine (kernel/dnsblock.c glue)
+intercept = []    # DNS interception of frames crossing a bridge (YesOS Security)
+frames = []       # Ethernet/VLAN/PPPoE/IPv4/IPv6 frame parser

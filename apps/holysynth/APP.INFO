@@ -1,0 +1,7 @@
+NAME=HolySynth
+ID=org.yesos.synth
+EXEC=MAIN.HQ
+ICON=SYNTH
+VERSION=1.0.0
+AUTHOR=Terry & Reinaldo
+DESC=HolyQ EML Phase Synthesizer

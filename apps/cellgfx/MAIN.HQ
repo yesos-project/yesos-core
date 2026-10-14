@@ -1,0 +1,31 @@
+// ============================================================================
+// CELLGFX - graphics from an isolated PMP cell
+// Draws into the cell's private 320x240 canvas; hart 0 shows it in this
+// app's own window. The app cannot reach the framebuffer or other windows.
+// ============================================================================
+
+U0 Frame(I64 t) {
+    gfx_clear(0x00101828);
+    I64 x = (t * 7) % 280;
+    gfx_rect(x, 96, 40, 40, 0x0000C8FF);
+    gfx_rect(0, 200, 320, 40, 0x00203040);
+    gfx_text(8, 8, "Isolated PMP cell", 0x00FFFFFF);
+    gfx_text(8, 212, "drawn by untrusted code", 0x0080FF80);
+    gfx_present();
+}
+
+U0 Main() {
+    I64 t = 0;
+    while (t < 60) {
+        Frame(t);
+        SleepMS(30);
+        t = t + 1;
+    }
+    // Try to paint the whole screen: the rectangle is clipped to the canvas.
+    gfx_rect(0 - 1000, 0 - 1000, 5000, 5000, 0x00FF00FF);
+    gfx_text(56, 112, "clipped to my window", 0x00000000);
+    gfx_present();
+    kprintf("CellGfx: done\n");
+}
+
+Main();

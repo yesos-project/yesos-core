@@ -1,0 +1,7 @@
+NAME=CellGfx
+ID=org.yesos.cellgfx
+EXEC=MAIN.HQ
+ICON=PKG
+VERSION=1.0.0
+AUTHOR=YesOS
+DESC=Graphics from an isolated PMP cell
