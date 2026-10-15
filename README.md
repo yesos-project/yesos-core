@@ -81,8 +81,12 @@ yet and will come to YesOS Desktop one piece at a time, each with tests:
   multiplication and division become integer addition and subtraction,
   while addition and subtraction need a polynomial approximation. Around it
   sit Clifford S³ rotors, min-plus tropical algebra, an FFT and more. It is
-  used by the lab's 3D pipeline and demos. Its accuracy and cost have not
-  been measured yet; that comes first, before any product uses it.
+  used by the lab's 3D pipeline and demos. Measured in the lab (on RISC-V,
+  under QEMU `-icount`): multiplication, division and square root are exact
+  or nearly so, but addition costs about 25 times the instructions of fixed
+  point (128 against 5) and subtraction, exp, ln and sin keep only about
+  13–17 bits. On a core with a hardware multiplier it is not a better
+  general numeric base than fixed point, so no product uses it.
   The lab's audio code labelled "EML" (resampler, dither, limiter) is plain
   fixed-point code that uses none of this number system. It was measured
   once in YesOS Desktop (commit `d900e40` there) and taken out again.
