@@ -10,7 +10,8 @@
 #                    that depends on $(CORE)/rust
 #
 # Result: yesos.elf, linked from the core, the chosen modules and the product
-# only, then proven (PMP layout, key-hart vector check, image hash). An image
+# only, then proven (PMP layout, key-hart vector check, no floating point,
+# image hash). An image
 # never contains code of a module or product that was not selected.
 # =============================================================================
 
@@ -75,6 +76,7 @@ define PMP_PROVE
 		echo "WARNING: Z3 prover not installed (make prover-setup); $(1) boots with runtime PMP verification only"; \
 	fi
 	@python3 $(CORE)/tools/check_keyhart_vector.py $(1) || { rm -f $(1); exit 1; }
+	@python3 $(CORE)/tools/check_no_fp.py $(1) || { rm -f $(1); exit 1; }
 	@python3 $(CORE)/tools/image_hash.py $(1) || { rm -f $(1); exit 1; }
 endef
 
