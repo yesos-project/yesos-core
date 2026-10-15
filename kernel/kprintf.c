@@ -14,6 +14,10 @@ static inline U0 kprintf_emit_char(char c) {
     }
 }
 
+U0 kputc(char c) {
+    kprintf_emit_char(c);
+}
+
 static U0 print_num(I64 num, I64 base, Bool is_signed, int width, Bool pad_zero, Bool left_align, char* out, int* out_idx) {
     char digits[] = "0123456789ABCDEF";
     char buf[65];

@@ -606,9 +606,9 @@ static U0 process_char(char c) {
             while (g_cmd_idx > 0 && ((U8)g_cmd_line[g_cmd_idx - 1] & 0xC0) == 0x80) g_cmd_idx--;
             if (g_cmd_idx > 0) g_cmd_idx--;
             g_cmd_line[g_cmd_idx] = '\0';
-            serial_putc('\b');
-            serial_putc(' ');
-            serial_putc('\b');
+            kputc('\b');
+            kputc(' ');
+            kputc('\b');
         }
     } else if ((c >= 32 && c <= 126) || (U8)c >= 0x80) {
         // Printable ASCII and UTF-8 bytes (accented letters, n with tilde...).
@@ -619,8 +619,8 @@ static U0 process_char(char c) {
         if (cont ? g_cmd_idx < CMD_BUFFER_SIZE - 1 : g_cmd_idx + need < CMD_BUFFER_SIZE) {
             g_cmd_line[g_cmd_idx++] = c;
             g_cmd_line[g_cmd_idx] = '\0';
-            if (!input_is_masked()) serial_putc(c);
-            else if (!cont) serial_putc('*');               // one '*' per character
+            if (!input_is_masked()) kputc(c);
+            else if (!cont) kputc('*');               // one '*' per character
         }
     }
 }
