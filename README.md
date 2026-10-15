@@ -21,16 +21,76 @@ selects only the parts it needs, so each image contains nothing else:
 | PMP and Z3 prover | `kernel/pmp.c`, `tools/pmp_prover.py` (+ `make prover-setup`) |
 | Cells | `kernel/cell.c`, `kernel/cell_rt.S` |
 | Key hart and integrity | `kernel/keyhart.c`, `kernel/keyhart_vkey.S`, `tools/check_keyhart_vector.py`, `tools/image_hash.py` |
+| Build checks | `tools/pmp_prover.py` (Z3), `tools/check_keyhart_vector.py`, `tools/check_no_fp.py`, `tools/image_hash.py` |
 | Drivers | `drivers/virtio_blk.c`, `drivers/ata.c` (block front end), `drivers/virtio_net.c` (up to 3 NICs, ARP/IPv4/UDP/ICMP), `drivers/serial.c`, `drivers/timer.c`, `drivers/earcon.c` |
 | Storage | `kernel/redsea_eml.c` (RedSea v4), `kernel/barrett_poly.c` (CRC64), `kernel/vfs.c`, `kernel/ramfs.c`, `kernel/lz4.c` |
 | Security services | `kernel/entropy.c`, `kernel/security_pin.c` (console PIN), `kernel/firewall.c` (RFC 1918 filter of the system's own stack), `kernel/netcfg.c` (static address) |
 | HolyQ | `kernel/holyq_*.c` (JIT for the console, compiler for cell programs) |
 | Shell | `shell/shell.c` (serial console) |
-| Rust | `rust/` (crate `yesos_core`: allocator, crypto + DRBG, packet filter, entropy; optional DNS engine and frame parser) |
+| Rust | `rust/` (crate `yesos_core`: allocator, crypto + DRBG, packet filter; optional DNS engine and frame parser) |
 | Optional modules | `vault` (`kernel/vault.c`, `kernel/vault_shell.c`), `packages` (`kernel/app_registry.c`, `kernel/ypkg.c`, `apps/`), `dns` (`kernel/dnsblock.c` + `rust/src/dns.rs`) |
 | Host tools | `tools/redsea_fsck.py`, `tools/redsea_injector.py`, `tools/deploy_app.py`, `tools/yesos_harness.py` (QEMU test harness), `tools/dns_wire.py` |
 
-## 2. Building a product on the core
+## 2. Design choices
+
+| Choice | What it means in practice | How it is enforced |
+|---|---|---|
+| **Machine mode only** | No S-mode, no U-mode, no page tables, no OpenSBI. Isolation comes from the PMP with the L bit, which binds M-mode itself until reset. | Z3 proof at build time, readback sweep at boot (section 4). |
+| **Integer-only kernel** | No floating-point instruction anywhere in the image; fractions use fixed point. Kernel behaviour never depends on FPU rounding modes or IEEE 754 corner cases. | `tools/check_no_fp.py` disassembles every image and deletes it if it finds one (compressed forms included). |
+| **Untrusted code on its own core** | Apps run in PMP cells on dedicated harts, never on the kernel hart. | Per-cell PMP proof, instruction verifier, watchdog. |
+| **A key that never touches memory** | The vault key lives only in vector registers of the key hart. | `tools/check_keyhart_vector.py` walks the call graph at every build. |
+| **Hardware CRC on every file** | RedSea stores a CRC64 per file, computed by Barrett reduction with the Zbc carry-less multiply (`clmul`). | `kernel/barrett_poly.c`; checked by `fsck` and the RedSea tests. |
+| **No libc, no blobs** | C freestanding, Rust `no_std` and assembly. The only outside code is Rust crates (RustCrypto, rustls) built from source at versions pinned in `Cargo.lock`. | The image hash is checked at boot and re-verified by the integrity monitor. |
+
+Two precise notes on the integer-only rule: the boot code resets the FP status
+register (`fcsr`) and leaves the FPU enabled, and the cell instruction verifier
+still accepts FP opcodes, although nothing in YesOS generates them.
+
+### How it compares (design, not performance)
+
+| | YesOS | Linux | seL4 | Zephyr | TempleOS |
+|---|---|---|---|---|---|
+| Kernel privilege on RISC-V | M-mode only | S-mode (firmware in M-mode) | S-mode (firmware in M-mode) | M-mode (optional U-mode threads) | x86-64 ring 0 only (no RISC-V) |
+| Isolation | Locked PMP; untrusted code on separate harts (cells) | MMU, processes | MMU, capabilities | PMP (userspace, stack guards), optional | None, by design |
+| Formal verification | PMP layout proven with Z3 at every build (not the kernel code) | None for the kernel as a whole | Functional correctness of the kernel, on supported configurations | None | None |
+| Floating point in the kernel | None (checked at every build) | Not in general kernel code | None | Optional | Used (F64) |
+| Userspace | None (cells instead) | Yes | Yes (user-level servers) | Optional user threads | None |
+| Real hardware | Not yet (QEMU only) | Yes | Yes | Yes | x86-64 PCs |
+
+This table compares designs, not speed. A performance comparison needs real
+boards: QEMU does not model cycle timing, so cycle counts measured in it would
+mean nothing. Benchmarks will be published with their method and scripts once
+YesOS runs on an Orange Pi RV2.
+
+### Measured today (QEMU `virt`)
+
+| | |
+|---|---|
+| Image code size (`.text`) | core self-test 337 KiB, Desktop 246 KiB, Security 357 KiB, NAS 758 KiB |
+| PMP entries used (kernel hart) | 9 of 16 |
+| Floating-point instructions in the image | 0 (`tools/check_no_fp.py`) |
+| Test suites | core 6, NAS 9, Security 1 (64 checks), Desktop 1 (15 checks), all run under QEMU |
+
+### Experimental work in `yesos-lab`
+
+The old, larger YesOS tree (`yesos-lab`) holds work that is not in the products
+yet and will come to YesOS Desktop one piece at a time, each with tests:
+
+- **EML**, an integer-only math library: log-domain number systems
+  (`eml64_t`, `eml128_t`), Clifford S³ rotors, min-plus tropical algebra, an
+  FFT and more. In the lab it does real work in the audio path: polyphase
+  resampling, TPDF dithering, a soft limiter and an audio clock PLL.
+- **A Pisano-period counter on the audio ring:** next to the HDA DMA ring
+  (a plain power-of-two buffer) runs a Fibonacci counter that wraps after
+  exactly one Pisano period, π(2^N) = 3·2^(N-1) steps. Today it is only reported
+  in telemetry; the samples themselves are placed linearly.
+- The graphical desktop (DolDoc window manager, 3D pipeline).
+
+None of this is claimed as a YesOS feature until it is in a product with tests
+that measure it (for example the resampler's SNR against a high-precision
+reference, and its instruction count against plain linear interpolation).
+
+## 3. Building a product on the core
 
 A product repository looks like this:
 
@@ -69,8 +129,8 @@ its services into the core without the core knowing them:
 
 `make` in a product links `yesos.elf` and fails, deleting it, if the PMP
 layout cannot be proven or the key hart can reach a vector instruction outside
-`keyhart_vkey.S`. Measured code size: NAS 790 KB, Security 377 KB, Desktop
-259 KB.
+`keyhart_vkey.S`. Measured code size (`.text`): NAS 758 KiB, Security 357 KiB,
+Desktop 246 KiB.
 
 In this repository, `make` builds the core self-test image (core + vault +
 packages + dns, `selftest/`) and `make test` runs the core's suites on it:
@@ -91,7 +151,7 @@ Tested with clang 23, QEMU 11.1, Rust 1.99 and Python 3.14. The QEMU CPU must
 support RVV 1.0 and Zkr (`-cpu rv64,v=true,vext_spec=v1.0,zkr=true`), so an old
 distribution QEMU may be too old.
 
-## 3. Security architecture
+## 4. Security architecture
 
 This section describes what the code actually enforces today. Items marked
 **pending** are known gaps, not features.
@@ -192,7 +252,7 @@ The PMP makes kernel code and read-only data immutable *for software*, but hardw
 
 Limits: only code and read-only data are covered (mutable data changes legitimately); the MAC key lives in the key hart's private RAM, which DMA could still read. Detection of Rowhammer-style access patterns with hardware performance counters needs real cache events, which QEMU does not model; it is left for the Orange Pi RV2.
 
-## 4. Storage: RedSea
+## 5. Storage: RedSea
 
 ### File system check (`fsck`)
 `redsea_eml_fsck` (console `fsck` / `fsck quick`; panel *Discos* → *Comprobar ahora*; the structural part runs at every mount) checks:
@@ -240,7 +300,7 @@ The tests that exercise RedSea through real use (`test_fs_model`, `test_crash`,
 `test_redsea_v4`, `test_disk_stress`) drive it through WebDAV and snapshots,
 so they live in `yesos-nas`.
 
-## 5. DNS filter engine (module `dns`) — `rust/src/dns.rs`, `kernel/dnsblock.c`
+## 6. DNS filter engine (module `dns`) — `rust/src/dns.rs`, `kernel/dnsblock.c`
 
 A Pi-hole style filter: blocked names get `0.0.0.0` / `::` (other types: no
 data), everything else is forwarded to an upstream on the LAN and cached. Used
@@ -262,7 +322,7 @@ types, allowlist precedence, lists and filter on/off, canary, DoH list, forged
 answers, dead upstream, failover, 334 malformed packets, `dns log`, a
 100,000-domain list, persistence, the rate limit and fsck.
 
-## 6. Console commands (core)
+## 7. Console commands (core)
 
 ```text
 Files       ls/dir [path]  cd  pwd  tree  cat  write <path> <text>  mkdir  rm
@@ -277,15 +337,16 @@ Modules     vault [status|init|unlock|lock|passwd]   pkg [list|install|run|remov
             dns [status|log|on|off|flush|test <d>|allow|block|unallow|unblock <d>|upstream <ip>...|auto|doh|list add|on|off|delete]
 ```
 
-## 7. Honest limits
+## 8. Honest limits
 
 - The PMP does not stop the kernel from reading its own data and does not cover device DMA.
 - Only virtio devices (QEMU) are supported; the Orange Pi RV2 still needs drivers for its real storage and network.
 - No wall clock; times are uptime, read from the CLINT `mtime` counter (`python3 tools/test_timer.py` compares it with the host clock, idle and under load). Its rate is QEMU's 10 MHz: the boards' timebases are not handled yet.
 - The RedSea directory holds 16384 entries in total.
+- No performance benchmarks yet: QEMU does not model cycles, so they wait for real hardware.
 - Without Zkr (e.g. JH7110) keys come from a weak source, and the system says so.
 
-## 8. Support YesOS
+## 9. Support YesOS
 
 YesOS is developed in the open and funded by donations. They pay for
 development time and for real RISC-V boards, so the missing storage and
@@ -293,7 +354,7 @@ network drivers can be written and tested outside the emulator.
 
 [Donate on Liberapay](https://liberapay.com/yesos-project/donate)
 
-## 9. License
+## 10. License
 MIT. In memory of Terry A. Davis (1969–2018).
 
 YesOS is inspired by his TempleOS (its HolyC became HolyQ here, and the RedSea
