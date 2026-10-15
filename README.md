@@ -26,7 +26,8 @@ selects only the parts it needs, so each image contains nothing else:
 | Storage | `kernel/redsea_eml.c` (RedSea v4), `kernel/barrett_poly.c` (CRC64), `kernel/vfs.c`, `kernel/ramfs.c`, `kernel/lz4.c` |
 | Security services | `kernel/entropy.c`, `kernel/security_pin.c` (console PIN), `kernel/firewall.c` (RFC 1918 filter of the system's own stack), `kernel/netcfg.c` (static address) |
 | HolyQ | `kernel/holyq_*.c` (JIT for the console, compiler for cell programs) |
-| Shell | `shell/shell.c` (serial console) |
+| Shell | `shell/shell.c` (serial console; UTF-8 input, so accented letters and ñ can be typed) |
+| Font | `fonts/yesos-8x16.txt` → `graphics/font_data.c` (`tools/gen_font.py`): 8x16, printable ASCII and Latin-1 for Spanish, used by cell text and the Desktop screen |
 | Rust | `rust/` (crate `yesos_core`: allocator, crypto + DRBG, packet filter; optional DNS engine and frame parser) |
 | Optional modules | `vault` (`kernel/vault.c`, `kernel/vault_shell.c`), `packages` (`kernel/app_registry.c`, `kernel/ypkg.c`, `apps/`), `dns` (`kernel/dnsblock.c` + `rust/src/dns.rs`) |
 | Host tools | `tools/redsea_fsck.py`, `tools/redsea_injector.py`, `tools/deploy_app.py`, `tools/yesos_harness.py` (QEMU test harness), `tools/dns_wire.py` |

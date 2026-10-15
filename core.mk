@@ -52,7 +52,7 @@ CORE_C_SRCS = $(addprefix $(CORE)/, \
          kernel/firewall.c kernel/security_pin.c kernel/netcfg.c \
          kernel/entropy.c kernel/cell.c kernel/keyhart.c \
          drivers/serial.c drivers/earcon.c drivers/timer.c drivers/ata.c drivers/pci.c drivers/virtio_blk.c drivers/virtio_net.c \
-         graphics/font_data.c shell/shell.c)
+         graphics/font_data.c graphics/font.c shell/shell.c)
 
 # Optional core modules
 CORE_vault_SRCS    = $(CORE)/kernel/vault.c $(CORE)/kernel/vault_shell.c   # encrypted /vault, key in the key hart

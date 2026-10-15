@@ -1,4 +1,5 @@
 #include "cell.h"
+#include "font.h"
 #include "pmp.h"
 #include "smp.h"
 #include "timer.h"
@@ -494,7 +495,6 @@ typedef struct {
 
 static CellJob g_jobs[CELL_MAX];
 
-extern const U8 g_font_8x16[256][16];
 
 static inline U32* cell_canvas(U32 k) {
     return (U32*)(uintptr_t)(cell_data_start(k) + CELL_CANVAS_OFFSET);
@@ -511,8 +511,8 @@ static U0 cell_service_text(U32 k, CellMailbox* mb) {
     I64 x = (I64)mb->rpc_args[0], y = (I64)mb->rpc_args[1];
     U32 color = (U32)mb->rpc_args[3];
     U32* canvas = cell_canvas(k);
-    for (const char* c = str; *c; c++, x += 8) {
-        const U8* glyph = g_font_8x16[(U8)*c];
+    for (const char* c = str; *c; x += FONT_WIDTH) {
+        const U8* glyph = font_glyph(font_utf8_next(&c));  // UTF-8, '?' if not in the font
         for (I64 r = 0; r < 16; r++) {
             I64 py = y + r;
             if (py < 0 || py >= CELL_CANVAS_H) continue;

@@ -602,17 +602,25 @@ static U0 process_char(char c) {
         if (!shell_secret_prompt_active()) print_prompt();
     } else if (c == '\b' || c == 127) {
         if (g_cmd_idx > 0) {
-            g_cmd_idx--;
+            // Remove one whole character: UTF-8 continuation bytes, then its lead byte.
+            while (g_cmd_idx > 0 && ((U8)g_cmd_line[g_cmd_idx - 1] & 0xC0) == 0x80) g_cmd_idx--;
+            if (g_cmd_idx > 0) g_cmd_idx--;
             g_cmd_line[g_cmd_idx] = '\0';
             serial_putc('\b');
             serial_putc(' ');
             serial_putc('\b');
         }
-    } else if (c >= 32 && c <= 126) {
-        if (g_cmd_idx < CMD_BUFFER_SIZE - 1) {
+    } else if ((c >= 32 && c <= 126) || (U8)c >= 0x80) {
+        // Printable ASCII and UTF-8 bytes (accented letters, n with tilde...).
+        // A multi-byte character is kept only if it fits whole.
+        U8 b = (U8)c;
+        U32 need = b < 0x80 ? 1 : b >= 0xF0 ? 4 : b >= 0xE0 ? 3 : b >= 0xC0 ? 2 : 1;
+        Bool cont = (b & 0xC0) == 0x80;
+        if (cont ? g_cmd_idx < CMD_BUFFER_SIZE - 1 : g_cmd_idx + need < CMD_BUFFER_SIZE) {
             g_cmd_line[g_cmd_idx++] = c;
             g_cmd_line[g_cmd_idx] = '\0';
-            serial_putc(input_is_masked() ? '*' : c);
+            if (!input_is_masked()) serial_putc(c);
+            else if (!cont) serial_putc('*');               // one '*' per character
         }
     }
 }
