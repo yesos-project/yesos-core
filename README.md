@@ -66,26 +66,26 @@ YesOS runs on an Orange Pi RV2.
 
 | | |
 |---|---|
-| Image code size (`.text`) | core self-test 337 KiB, Desktop 265 KiB, Security 361 KiB, NAS 758 KiB |
+| Image code size (`.text`) | core self-test 337 KiB, Desktop 253 KiB, Security 361 KiB, NAS 758 KiB |
 | PMP entries used (kernel hart) | 9 of 16 |
 | Floating-point instructions in the image | 0 (`tools/check_no_fp.py`) |
-| EML audio resampler, 44.1 → 48 kHz (Desktop) | SINAD 82.4 dB at 1 kHz, 45.6 dB at 10 kHz (linear interpolation: 62.4 and 20.4 dB); 172.8 instructions per stereo frame (linear: 43.6). [Method and full tables](https://github.com/yesos-project/yesos-desktop#eml-against-the-plain-methods) |
-| Test suites | core 7, NAS 9, Security 1 (64 checks), Desktop 3 (15 + 44 + 32 checks), all run under QEMU |
+| Test suites | core 7, NAS 9, Security 1 (64 checks), Desktop 2 (15 + 20 checks), all run under QEMU |
 
 ### Experimental work in `yesos-lab`
 
 The old, larger YesOS tree (`yesos-lab`) holds work that is not in the products
 yet and will come to YesOS Desktop one piece at a time, each with tests:
 
-- **EML**, an integer-only math library: log-domain number systems
-  (`eml64_t`, `eml128_t`), Clifford S³ rotors, min-plus tropical algebra, an
-  FFT and more. In the lab it does real work in the audio path. Its
-  resampler, TPDF dither and soft limiter are now in YesOS Desktop and
-  measured there against plain methods and a float64 reference: the 8-tap
-  resampler beats linear interpolation by 20–38 dB from 1 to 10 kHz at four
-  times the instructions, but stays well short of a near-ideal resampler
-  above a few kHz (the lab's "> 91 dB" holds only up to about 1 kHz). The
-  audio clock PLL and the rest of EML are still lab-only.
+- **EML**, an integer-only number system and math library. Its core type
+  (`eml64_t`) stores the base-2 logarithm of a value in Q32 fixed point:
+  multiplication and division become integer addition and subtraction,
+  while addition and subtraction need a polynomial approximation. Around it
+  sit Clifford S³ rotors, min-plus tropical algebra, an FFT and more. It is
+  used by the lab's 3D pipeline and demos. Its accuracy and cost have not
+  been measured yet; that comes first, before any product uses it.
+  The lab's audio code labelled "EML" (resampler, dither, limiter) is plain
+  fixed-point code that uses none of this number system. It was measured
+  once in YesOS Desktop (commit `d900e40` there) and taken out again.
 - **A Pisano-period counter on the audio ring:** next to the HDA DMA ring
   (a plain power-of-two buffer) runs a Fibonacci counter that wraps after
   exactly one Pisano period, π(2^N) = 3·2^(N-1) steps. Today it is only reported
@@ -93,7 +93,7 @@ yet and will come to YesOS Desktop one piece at a time, each with tests:
 - The graphical desktop (DolDoc window manager, 3D pipeline).
 
 None of this is claimed as a YesOS feature until it is in a product with tests
-that measure it, as the resampler now is.
+that measure it.
 
 ## 3. Building a product on the core
 
@@ -135,7 +135,7 @@ its services into the core without the core knowing them:
 `make` in a product links `yesos.elf` and fails, deleting it, if the PMP
 layout cannot be proven or the key hart can reach a vector instruction outside
 `keyhart_vkey.S`. Measured code size (`.text`): NAS 758 KiB, Security 361 KiB,
-Desktop 265 KiB.
+Desktop 253 KiB.
 
 In this repository, `make` builds the core self-test image (core + vault +
 packages + dns, `selftest/`) and `make test` runs the core's suites on it:
