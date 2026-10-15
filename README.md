@@ -70,7 +70,7 @@ YesOS runs on an Orange Pi RV2.
 | Image code size (`.text`) | core self-test 337 KiB, Desktop 259 KiB, Security 361 KiB, NAS 758 KiB |
 | PMP entries used (kernel hart) | 9 of 16 |
 | Floating-point instructions in the image | 0 (`tools/check_no_fp.py`) |
-| Test suites | core 7, NAS 9, Security 1 (64 checks), Desktop 3 (15 + 38 + 17 checks), all run under QEMU |
+| Test suites | core 7, NAS 9, Security 1 (64 checks), Desktop 3 (17 + 38 + 22 checks), all run under QEMU |
 
 ### Experimental work in `yesos-lab`
 
