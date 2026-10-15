@@ -51,7 +51,7 @@ CORE_C_SRCS = $(addprefix $(CORE)/, \
          kernel/holyq_jit.c kernel/holyq_rv64_emit.c kernel/holyq_rv64_compiler.c \
          kernel/firewall.c kernel/security_pin.c kernel/netcfg.c \
          kernel/entropy.c kernel/cell.c kernel/keyhart.c \
-         drivers/serial.c drivers/earcon.c drivers/timer.c drivers/ata.c drivers/virtio_blk.c drivers/virtio_net.c \
+         drivers/serial.c drivers/earcon.c drivers/timer.c drivers/ata.c drivers/pci.c drivers/virtio_blk.c drivers/virtio_net.c \
          graphics/font_data.c shell/shell.c)
 
 # Optional core modules

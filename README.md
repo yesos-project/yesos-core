@@ -22,7 +22,7 @@ selects only the parts it needs, so each image contains nothing else:
 | Cells | `kernel/cell.c`, `kernel/cell_rt.S` |
 | Key hart and integrity | `kernel/keyhart.c`, `kernel/keyhart_vkey.S`, `tools/check_keyhart_vector.py`, `tools/image_hash.py` |
 | Build checks | `tools/pmp_prover.py` (Z3), `tools/check_keyhart_vector.py`, `tools/check_no_fp.py`, `tools/image_hash.py` |
-| Drivers | `drivers/virtio_blk.c`, `drivers/ata.c` (block front end), `drivers/virtio_net.c` (up to 3 NICs, ARP/IPv4/UDP/ICMP), `drivers/serial.c`, `drivers/timer.c`, `drivers/earcon.c` |
+| Drivers | `drivers/pci.c` (PCIe enumeration, one BAR allocator), `drivers/virtio_blk.c`, `drivers/ata.c` (block front end), `drivers/virtio_net.c` (up to 3 NICs, ARP/IPv4/UDP/ICMP), `drivers/serial.c`, `drivers/timer.c`, `drivers/earcon.c` |
 | Storage | `kernel/redsea_eml.c` (RedSea v4), `kernel/barrett_poly.c` (CRC64), `kernel/vfs.c`, `kernel/ramfs.c`, `kernel/lz4.c` |
 | Security services | `kernel/entropy.c`, `kernel/security_pin.c` (console PIN), `kernel/firewall.c` (RFC 1918 filter of the system's own stack), `kernel/netcfg.c` (static address) |
 | HolyQ | `kernel/holyq_*.c` (JIT for the console, compiler for cell programs) |
@@ -69,7 +69,7 @@ YesOS runs on an Orange Pi RV2.
 | Image code size (`.text`) | core self-test 337 KiB, Desktop 246 KiB, Security 357 KiB, NAS 758 KiB |
 | PMP entries used (kernel hart) | 9 of 16 |
 | Floating-point instructions in the image | 0 (`tools/check_no_fp.py`) |
-| Test suites | core 6, NAS 9, Security 1 (64 checks), Desktop 1 (15 checks), all run under QEMU |
+| Test suites | core 7, NAS 9, Security 1 (64 checks), Desktop 1 (15 checks), all run under QEMU |
 
 ### Experimental work in `yesos-lab`
 
@@ -143,7 +143,7 @@ sudo apt install -y git make clang lld llvm qemu-system-misc python3 python3-ven
 rustup target add riscv64gc-unknown-none-elf
 make prover-setup        # once: Z3 in tools/.venv
 make                     # yesos.elf: links, proves the PMP layout, checks the key hart, hashes the image
-make test                # test_pmp, test_cells, test_integrity, test_packages, test_dns, test_timer
+make test                # test_pmp, test_cells, test_integrity, test_packages, test_dns, test_timer, test_pci
 make run                 # serial console in the terminal (Ctrl-A X to quit)
 ```
 
@@ -332,7 +332,7 @@ Console     pin [status|set|change]  lock
 Network     net  ping [ip]  net bench  net ip <a.b.c.d/nn> [gw <ip>] | default   firewall [status|audit]
 Isolation   pmp  pmp test  cell  cell test  cell run <f.HQ> [n]  keyhart test  integrity
 HolyQ       run <f.HQ>  jit <code>  jit bench|rvv|disasm <fn>   (console: full privileges)
-System      sysinfo  mem  hardening  smp  uptime  tasks  ata  clear  reboot  poweroff
+System      sysinfo  mem  hardening  smp  uptime  tasks  ata  pci  clear  reboot  poweroff
 Modules     vault [status|init|unlock|lock|passwd]   pkg [list|install|run|remove]
             dns [status|log|on|off|flush|test <d>|allow|block|unallow|unblock <d>|upstream <ip>...|auto|doh|list add|on|off|delete]
 ```

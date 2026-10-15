@@ -1,4 +1,5 @@
 #include "virtio_net.h"
+#include "pci.h"
 #include "ports.h"
 #include "kprintf.h"
 #include "memory.h"
@@ -15,21 +16,9 @@
 // Supports: virtio-net-pci (Vendor 0x1AF4, Device 0x1041 or 0x1000)
 // ----------------------------------------------------------------------------
 
-#define RV_PCI_ECAM_BASE       0x30000000ULL
-#define RV_PCI_SLOT_COUNT      32
-
 static Bool net_send_telemetry_internal(const char* dst_ip_str, U16 port, Bool verbose);
 
 // PCI Configuration Registers
-#define PCI_REG_VENDOR_ID      0x00
-#define PCI_REG_DEVICE_ID      0x02
-#define PCI_REG_COMMAND        0x04
-#define PCI_REG_STATUS         0x06
-#define PCI_REG_BAR0           0x10
-#define PCI_REG_CAP_PTR        0x34
-
-#define PCI_STATUS_CAP_LIST    0x10
-#define PCI_CAP_ID_VNDR        0x09
 
 // VirtIO Modern PCI Capability Types
 #define VIRTIO_PCI_CAP_COMMON_CFG 1
@@ -146,7 +135,6 @@ static Bool s_telemetry_periodic;
 static VirtIONetDev g_ports[NET_MAX_PORTS];
 static U32 g_port_count = 0;
 #define g_net_dev (g_ports[0])
-static uintptr_t s_next_pci_net_mmio = 0x47000000ULL;
 
 // Global ping tracking state
 static volatile Bool     g_ping_reply_received = FALSE;
@@ -188,47 +176,6 @@ static uint16_t net_calc_checksum(const void* data, size_t len) {
 // PCI BAR Allocation & Bus Configuration
 // ----------------------------------------------------------------------------
 
-static U0 pci_assign_bars_net(uintptr_t dev_ecam, uintptr_t bar_addrs[6]) {
-    for (int i = 0; i < 6; i++) {
-        uintptr_t bar_reg = dev_ecam + PCI_REG_BAR0 + (i * 4);
-        U32 orig = mmio_read32(bar_reg);
-        mmio_write32(bar_reg, 0xFFFFFFFF);
-        U32 probed = mmio_read32(bar_reg);
-        mmio_write32(bar_reg, orig);
-
-        if (probed == 0 || probed == 0xFFFFFFFF) {
-            bar_addrs[i] = 0;
-            continue;
-        }
-
-        if ((probed & 0x01) == 0) { // Memory BAR
-            U32 type = (probed >> 1) & 0x03; // 0 = 32-bit, 2 = 64-bit
-            U32 mask = probed & ~0x0F;
-            U32 size = ~mask + 1;
-            if (size < 0x1000) size = 0x1000;
-
-            s_next_pci_net_mmio = (s_next_pci_net_mmio + size - 1) & ~(uintptr_t)(size - 1);
-            bar_addrs[i] = s_next_pci_net_mmio;
-            mmio_write32(bar_reg, (U32)s_next_pci_net_mmio);
-
-            if (type == 2 && i < 5) {
-                i++;
-                uintptr_t bar_reg_high = dev_ecam + PCI_REG_BAR0 + (i * 4);
-                mmio_write32(bar_reg_high, (U32)(s_next_pci_net_mmio >> 32));
-                bar_addrs[i] = 0;
-            }
-            s_next_pci_net_mmio += size;
-        } else {
-            bar_addrs[i] = 0;
-        }
-    }
-
-    // Enable Memory Space (bit 1) and Bus Master DMA (bit 2)
-    U16 cmd = mmio_read16(dev_ecam + PCI_REG_COMMAND);
-    cmd |= 0x07;
-    mmio_write16(dev_ecam + PCI_REG_COMMAND, cmd);
-}
-
 // ----------------------------------------------------------------------------
 // Device Initialization
 // ----------------------------------------------------------------------------
@@ -239,8 +186,12 @@ static Bool virtio_net_init_device(VirtIONetDev* dev, uintptr_t dev_ecam, U32 sl
     dev->info.pci_slot = slot;
 
     // 1. Assign PCI BARs
-    uintptr_t bar_addrs[6] = {0};
-    pci_assign_bars_net(dev_ecam, bar_addrs);
+    PciDevice pd;
+    MemSet(&pd, 0, sizeof(pd));
+    pd.ecam = dev_ecam;
+    pd.slot = (U8)slot;
+    if (!pci_enable(&pd)) return FALSE;
+    uintptr_t* bar_addrs = pd.bar;
 
     // 2. Parse PCI Capabilities for Modern VirtIO structures
     U16 status = mmio_read16(dev_ecam + PCI_REG_STATUS);
@@ -432,8 +383,8 @@ Bool virtio_net_init(U0) {
     MemSet(g_ports, 0, sizeof(g_ports));
     g_port_count = 0;
 
-    for (U32 slot = 0; slot < RV_PCI_SLOT_COUNT; slot++) {
-        uintptr_t dev_ecam = RV_PCI_ECAM_BASE + (slot << 15);
+    for (U32 slot = 0; slot < PCI_SLOT_COUNT; slot++) {
+        uintptr_t dev_ecam = pci_ecam(slot, 0);
         U32 vendor_dev = mmio_read32(dev_ecam + PCI_REG_VENDOR_ID);
         U16 vendor = (U16)(vendor_dev & 0xFFFF);
         U16 device = (U16)(vendor_dev >> 16);

@@ -1,4 +1,5 @@
 #include "shell.h"
+#include "pci.h"
 #include "vault.h"
 #include "product.h"
 #include "netcfg.h"
@@ -178,7 +179,7 @@ U0 shell_execute_command(const char* cmd) {
         kprintf("  HolyQ\n");
         kprintf("    run <file.HQ>  jit <code>  jit bench|rvv|disasm <f>  (console: full privileges)\n");
         kprintf("  System\n");
-        kprintf("    sysinfo  mem  hardening  smp  uptime  tasks  ata  clear  reboot  poweroff\n");
+        kprintf("    sysinfo  mem  hardening  smp  uptime  tasks  ata  pci  clear  reboot  poweroff\n");
         for (U32 i = 0; i < g_ext_count; i++) if (g_ext[i]->help) g_ext[i]->help();
         kprintf("=============================================================\n");
     } else if (StrCmp(cmd, "clear") == 0 || StrCmp(cmd, "cls") == 0) {
@@ -449,6 +450,8 @@ U0 shell_execute_command(const char* cmd) {
         } else {
             kprintf("RedSea-EML: File '%s' not found on disk.\n", p);
         }
+    } else if (StrCmp(cmd, "pci") == 0) {
+        pci_print();
     } else if (StrCmp(cmd, "disk") == 0 || StrCmp(cmd, "disks") == 0 || StrCmp(cmd, "redsea") == 0 || StrCmp(cmd, "vol") == 0) {
         speaker_event(BEEP_CONFIRM);
         kprintf("\n================ [ YESOS APPLIANCE DISK SUBSYSTEM ] ================\n");
