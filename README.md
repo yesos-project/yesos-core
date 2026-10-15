@@ -11,7 +11,7 @@ selects only the parts it needs, so each image contains nothing else:
 |---|---|---|
 | YesOS NAS | `yesos-nas` | file services (WebDAV, NAS protocol), web panel, accounts, snapshots, replication |
 | YesOS Security | `yesos-security` | invisible bridge firewall between the ONT and the router |
-| YesOS Desktop | `yesos-desktop` | for now the core and its console; features are added one at a time |
+| YesOS Desktop | `yesos-desktop` | the core, its console and HD Audio output; features are added one at a time |
 
 ## 1. What the core provides
 
@@ -66,10 +66,10 @@ YesOS runs on an Orange Pi RV2.
 
 | | |
 |---|---|
-| Image code size (`.text`) | core self-test 337 KiB, Desktop 246 KiB, Security 357 KiB, NAS 758 KiB |
+| Image code size (`.text`) | core self-test 337 KiB, Desktop 253 KiB, Security 361 KiB, NAS 758 KiB |
 | PMP entries used (kernel hart) | 9 of 16 |
 | Floating-point instructions in the image | 0 (`tools/check_no_fp.py`) |
-| Test suites | core 7, NAS 9, Security 1 (64 checks), Desktop 1 (15 checks), all run under QEMU |
+| Test suites | core 7, NAS 9, Security 1 (64 checks), Desktop 2 (15 + 20 checks), all run under QEMU |
 
 ### Experimental work in `yesos-lab`
 
@@ -129,8 +129,8 @@ its services into the core without the core knowing them:
 
 `make` in a product links `yesos.elf` and fails, deleting it, if the PMP
 layout cannot be proven or the key hart can reach a vector instruction outside
-`keyhart_vkey.S`. Measured code size (`.text`): NAS 758 KiB, Security 357 KiB,
-Desktop 246 KiB.
+`keyhart_vkey.S`. Measured code size (`.text`): NAS 758 KiB, Security 361 KiB,
+Desktop 253 KiB.
 
 In this repository, `make` builds the core self-test image (core + vault +
 packages + dns, `selftest/`) and `make test` runs the core's suites on it:
