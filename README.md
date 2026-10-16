@@ -21,13 +21,13 @@ selects only the parts it needs, so each image contains nothing else:
 | PMP and Z3 prover | `kernel/pmp.c`, `tools/pmp_prover.py` (+ `make prover-setup`) |
 | Cells | `kernel/cell.c`, `kernel/cell_rt.S` |
 | Key hart and integrity | `kernel/keyhart.c`, `kernel/keyhart_vkey.S`, `tools/check_keyhart_vector.py`, `tools/image_hash.py` |
-| Build checks | `tools/pmp_prover.py` (Z3), `tools/check_keyhart_vector.py`, `tools/check_no_fp.py`, `tools/image_hash.py` |
+| Build checks | `tools/pmp_prover.py` (Z3), `tools/check_keyhart_vector.py`, `tools/check_no_fp.py`, `tools/check_symbols.py`, `tools/image_hash.py` |
 | Drivers | `drivers/pci.c` (PCIe enumeration, one BAR allocator), `drivers/virtio_blk.c`, `drivers/ata.c` (block front end), `drivers/virtio_net.c` (up to 3 NICs, ARP/IPv4/UDP/ICMP), `drivers/serial.c`, `drivers/timer.c`, `drivers/earcon.c` |
 | Storage | `kernel/redsea_eml.c` (RedSea v4), `kernel/barrett_poly.c` (CRC64), `kernel/vfs.c`, `kernel/ramfs.c`, `kernel/lz4.c` |
 | Security services | `kernel/entropy.c`, `kernel/security_pin.c` (console PIN), `kernel/firewall.c` (RFC 1918 filter of the system's own stack), `kernel/netcfg.c` (static address) |
 | HolyQ | `kernel/holyq_*.c` (JIT for the console, compiler for cell programs) |
-| Shell | `shell/shell.c` (serial console; UTF-8 input, so accented letters and ñ can be typed; line editing with arrows, Home, End, Delete and a 16-command history, none of it for hidden input) |
-| Font | `fonts/yesos-8x16.txt` → `graphics/font_data.c` (`tools/gen_font.py`): 8x16, 151 glyphs: printable ASCII, the Latin-1 letters and signs of Spanish and the Western languages' accented vowels, and €; used by cell text and the Desktop screen |
+| Shell | `shell/shell.c` (serial console; UTF-8 input, so accented letters and ñ can be typed; line editing with arrows, Home, End, Delete and a 16-command history in module `lineedit`, none of it for hidden input) |
+| Font (module `gfx`) | `fonts/yesos-8x16.txt` → `graphics/font_data.c` (`tools/gen_font.py`): 8x16, 151 glyphs: printable ASCII, the Latin-1 letters and signs of Spanish and the Western languages' accented vowels, and €; used by cell text and the Desktop screen |
 | Rust | `rust/` (crate `yesos_core`: allocator, crypto + DRBG, packet filter; optional DNS engine and frame parser) |
 | Optional modules | `vault` (`kernel/vault.c`, `kernel/vault_shell.c`), `packages` (`kernel/app_registry.c`, `kernel/ypkg.c`, `apps/`), `dns` (`kernel/dnsblock.c` + `rust/src/dns.rs`) |
 | Host tools | `tools/redsea_fsck.py`, `tools/redsea_injector.py`, `tools/deploy_app.py`, `tools/yesos_harness.py` (QEMU test harness), `tools/dns_wire.py` |
@@ -67,7 +67,7 @@ YesOS runs on an Orange Pi RV2.
 
 | | |
 |---|---|
-| Image code size (`.text`) | core self-test 341 KiB, Desktop 272 KiB, Security 361 KiB, NAS 762 KiB |
+| Image code size (`.text`) | core self-test 341 KiB, Desktop 272 KiB, Security 357 KiB, NAS 754 KiB |
 | PMP entries used (kernel hart) | 9 of 16 |
 | Floating-point instructions in the image | 0 (`tools/check_no_fp.py`) |
 | Test suites | core 8, NAS 9, Security 1 (64 checks), Desktop 4 (17 + 38 + 23 + 35 checks), all run under QEMU |
@@ -119,10 +119,25 @@ Its `Makefile` names its parts and includes `core/core.mk`:
 
 ```make
 PRODUCT = security
-CORE_MODULES = dns                  # optional core modules: vault packages dns
+CORE_MODULES = dns                  # optional core modules: vault packages dns gfx lineedit
+FORBIDDEN_SYMBOLS = hda_ display_ input_ terminal_ wav_   # never link the Desktop's drivers
 PRODUCT_C_SRCS = $(wildcard src/*.c)
 include core/core.mk                # yesos.elf: compile, link, prove
 ```
+
+| Module | What it adds | Products |
+|---|---|---|
+| `vault` | encrypted `/vault`, key in the key hart | NAS |
+| `packages` | `.ypk` apps run in PMP cells | NAS |
+| `dns` | DNS filter (engine in Rust) | Security |
+| `gfx` | the 8x16 font and the cells' text call (refused without it) | Desktop |
+| `lineedit` | console line editing and history (without it: type and backspace only) | Desktop |
+
+A product gets only what it names, and less code is less attack surface:
+NAS and Security have no font, no line editor and none of the Desktop's
+drivers. `tools/check_symbols.py` enforces it on every build: the image is
+deleted if it contains a symbol of an unselected module or one of the
+product's `FORBIDDEN_SYMBOLS`.
 
 The core calls the product at fixed points (`include/product.h`):
 `PRODUCT_NAME`, `product_early_init()` (after the network drivers),
@@ -141,8 +156,9 @@ its services into the core without the core knowing them:
 | `kprintf_set_hook(fn)` (every character the console writes, the shell's echo included) | `kprintf.h` | Desktop's console on the screen |
 
 `make` in a product links `yesos.elf` and fails, deleting it, if the PMP
-layout cannot be proven or the key hart can reach a vector instruction outside
-`keyhart_vkey.S`. Measured code size (`.text`): NAS 762 KiB, Security 361 KiB,
+layout cannot be proven, the key hart can reach a vector instruction outside
+`keyhart_vkey.S`, or it contains a floating-point instruction or a forbidden
+symbol. Measured code size (`.text`): NAS 754 KiB, Security 357 KiB,
 Desktop 272 KiB.
 
 In this repository, `make` builds the core self-test image (core + vault +
