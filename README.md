@@ -26,8 +26,8 @@ selects only the parts it needs, so each image contains nothing else:
 | Storage | `kernel/redsea_eml.c` (RedSea v4), `kernel/barrett_poly.c` (CRC64), `kernel/vfs.c`, `kernel/ramfs.c`, `kernel/lz4.c` |
 | Security services | `kernel/entropy.c`, `kernel/security_pin.c` (console PIN), `kernel/firewall.c` (RFC 1918 filter of the system's own stack), `kernel/netcfg.c` (static address) |
 | HolyQ | `kernel/holyq_*.c` (JIT for the console, compiler for cell programs) |
-| Shell | `shell/shell.c` (serial console; UTF-8 input, so accented letters and ñ can be typed) |
-| Font | `fonts/yesos-8x16.txt` → `graphics/font_data.c` (`tools/gen_font.py`): 8x16, printable ASCII and Latin-1 for Spanish, used by cell text and the Desktop screen |
+| Shell | `shell/shell.c` (serial console; UTF-8 input, so accented letters and ñ can be typed; line editing with arrows, Home, End, Delete and a 16-command history, none of it for hidden input) |
+| Font | `fonts/yesos-8x16.txt` → `graphics/font_data.c` (`tools/gen_font.py`): 8x16, 151 glyphs: printable ASCII, the Latin-1 letters and signs of Spanish and the Western languages' accented vowels, and €; used by cell text and the Desktop screen |
 | Rust | `rust/` (crate `yesos_core`: allocator, crypto + DRBG, packet filter; optional DNS engine and frame parser) |
 | Optional modules | `vault` (`kernel/vault.c`, `kernel/vault_shell.c`), `packages` (`kernel/app_registry.c`, `kernel/ypkg.c`, `apps/`), `dns` (`kernel/dnsblock.c` + `rust/src/dns.rs`) |
 | Host tools | `tools/redsea_fsck.py`, `tools/redsea_injector.py`, `tools/deploy_app.py`, `tools/yesos_harness.py` (QEMU test harness), `tools/dns_wire.py` |
@@ -67,10 +67,10 @@ YesOS runs on an Orange Pi RV2.
 
 | | |
 |---|---|
-| Image code size (`.text`) | core self-test 337 KiB, Desktop 272 KiB, Security 361 KiB, NAS 758 KiB |
+| Image code size (`.text`) | core self-test 341 KiB, Desktop 272 KiB, Security 361 KiB, NAS 762 KiB |
 | PMP entries used (kernel hart) | 9 of 16 |
 | Floating-point instructions in the image | 0 (`tools/check_no_fp.py`) |
-| Test suites | core 7, NAS 9, Security 1 (64 checks), Desktop 4 (17 + 38 + 23 + 27 checks), all run under QEMU |
+| Test suites | core 8, NAS 9, Security 1 (64 checks), Desktop 4 (17 + 38 + 23 + 35 checks), all run under QEMU |
 
 ### Experimental work in `yesos-lab`
 
@@ -142,7 +142,7 @@ its services into the core without the core knowing them:
 
 `make` in a product links `yesos.elf` and fails, deleting it, if the PMP
 layout cannot be proven or the key hart can reach a vector instruction outside
-`keyhart_vkey.S`. Measured code size (`.text`): NAS 758 KiB, Security 361 KiB,
+`keyhart_vkey.S`. Measured code size (`.text`): NAS 762 KiB, Security 361 KiB,
 Desktop 272 KiB.
 
 In this repository, `make` builds the core self-test image (core + vault +
@@ -156,7 +156,7 @@ sudo apt install -y git make clang lld llvm qemu-system-misc python3 python3-ven
 rustup target add riscv64gc-unknown-none-elf
 make prover-setup        # once: Z3 in tools/.venv
 make                     # yesos.elf: links, proves the PMP layout, checks the key hart, hashes the image
-make test                # test_pmp, test_cells, test_integrity, test_packages, test_dns, test_timer, test_pci
+make test                # test_pmp, test_cells, test_integrity, test_packages, test_dns, test_timer, test_pci, test_line_edit
 make run                 # serial console in the terminal (Ctrl-A X to quit)
 ```
 
