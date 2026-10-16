@@ -120,7 +120,7 @@ Its `Makefile` names its parts and includes `core/core.mk`:
 ```make
 PRODUCT = security
 CORE_MODULES = dns                  # optional core modules: vault packages dns gfx lineedit
-FORBIDDEN_SYMBOLS = hda_ display_ input_ terminal_ wav_   # never link the Desktop's drivers
+FORBIDDEN_SYMBOLS = hda_ display_ input_ terminal_ wav_ desktop_   # never link the Desktop's code
 PRODUCT_C_SRCS = $(wildcard src/*.c)
 include core/core.mk                # yesos.elf: compile, link, prove
 ```
