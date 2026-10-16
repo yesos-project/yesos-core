@@ -587,11 +587,12 @@ U0 shell_execute_command(const char* cmd) {
 }
 
 
-static Bool input_is_masked(U0) {
+static Bool shell_input_masked(U0) {
     return shell_secret_prompt_active() || security_pin_is_locked();
 }
 
-// ---- line editor ----------------------------------------------------------------
+#ifdef YESOS_WITH_LINEEDIT
+// ---- line editor (optional core module "lineedit") -------------------------------
 // The line is edited in place: left/right, Home/End, Delete, and up/down
 // through the last commands. Keys arrive as the escape sequences a terminal
 // sends (ESC [ A ... and ESC [ 3 ~, ESC O H ...), from the serial port or
@@ -696,8 +697,10 @@ static U0 history_add(const char* line) {
     if (g_hist_count < SHELL_HISTORY) g_hist_count++;
 }
 
-static U0 edit_key(char final, U32 num) {
-    if (input_is_masked()) return;                      // no editing of hidden input
+// Kept out of line: tools/check_symbols.py finds it to tell that the
+// editor is in an image.
+__attribute__((noinline)) static U0 ledit_key(char final, U32 num) {
+    if (shell_input_masked()) return;                      // no editing of hidden input
     if (final == 'A') history_move(1);
     else if (final == 'B') history_move(-1);
     else if (final == 'C' && g_cmd_pos < g_cmd_idx) {
@@ -727,7 +730,7 @@ static U0 process_char(char c) {
         if (b >= '0' && b <= '9') { g_esc_num = g_esc_num * 10 + (b - '0'); return; }
         if (b == ';') return;
         g_esc = 0;
-        if (b >= 0x40 && b <= 0x7E) edit_key((char)b, g_esc_num);
+        if (b >= 0x40 && b <= 0x7E) ledit_key((char)b, g_esc_num);
         return;
     }
     if (b == 0x1B) { g_esc = 1; g_utf8_have = 0; return; }
@@ -738,7 +741,7 @@ static U0 process_char(char c) {
             if (g_utf8_have < g_utf8_need) return;
             U32 n = g_utf8_have;
             g_utf8_have = 0;
-            if (input_is_masked()) {
+            if (shell_input_masked()) {
                 if (g_cmd_idx + (int)n < CMD_BUFFER_SIZE) {
                     MemCpy(g_cmd_line + g_cmd_idx, g_utf8, n);
                     g_cmd_idx += n;
@@ -756,7 +759,7 @@ static U0 process_char(char c) {
     if (c == '\r' || c == '\n') {
         kprintf("\n");
         g_cmd_line[g_cmd_idx] = '\0';
-        Bool was_secret = input_is_masked();
+        Bool was_secret = shell_input_masked();
         if (!was_secret) history_add(g_cmd_line);
         g_hist_back = 0;
         shell_execute_command(g_cmd_line);
@@ -765,7 +768,7 @@ static U0 process_char(char c) {
         g_cmd_line[0] = '\0';
         if (!shell_secret_prompt_active()) print_prompt();
     } else if (c == '\b' || c == 127) {
-        if (input_is_masked()) {
+        if (shell_input_masked()) {
             if (g_cmd_idx > 0) {
                 g_cmd_idx = g_cmd_pos = char_start_before(g_cmd_idx);
                 g_cmd_line[g_cmd_idx] = '\0';
@@ -777,7 +780,7 @@ static U0 process_char(char c) {
             delete_range(from, g_cmd_pos);
         }
     } else if (b >= 32 && b <= 126) {
-        if (input_is_masked()) {
+        if (shell_input_masked()) {
             if (g_cmd_idx + 1 < CMD_BUFFER_SIZE) {
                 g_cmd_line[g_cmd_idx++] = c;
                 g_cmd_pos = g_cmd_idx;
@@ -792,6 +795,45 @@ static U0 process_char(char c) {
         g_utf8_need = b >= 0xF0 ? 4 : b >= 0xE0 ? 3 : 2;
     }
 }
+
+#else
+// Without the "lineedit" module (NAS, Security): append and backspace only,
+// no history; the least console code.
+static U0 process_char(char c) {
+    if (c == '\r' || c == '\n') {
+        kprintf("\n");
+        g_cmd_line[g_cmd_idx] = '\0';
+        Bool was_secret = shell_input_masked();
+        shell_execute_command(g_cmd_line);
+        if (was_secret) yc_wipe((U8*)g_cmd_line, sizeof(g_cmd_line));
+        g_cmd_idx = 0;
+        g_cmd_line[0] = '\0';
+        if (!shell_secret_prompt_active()) print_prompt();
+    } else if (c == '\b' || c == 127) {
+        if (g_cmd_idx > 0) {
+            // Remove one whole character: UTF-8 continuation bytes, then its lead byte.
+            while (g_cmd_idx > 0 && ((U8)g_cmd_line[g_cmd_idx - 1] & 0xC0) == 0x80) g_cmd_idx--;
+            if (g_cmd_idx > 0) g_cmd_idx--;
+            g_cmd_line[g_cmd_idx] = '\0';
+            kputc('\b');
+            kputc(' ');
+            kputc('\b');
+        }
+    } else if ((c >= 32 && c <= 126) || (U8)c >= 0x80) {
+        // Printable ASCII and UTF-8 bytes (accented letters, n with tilde...).
+        // A multi-byte character is kept only if it fits whole.
+        U8 b = (U8)c;
+        U32 need = b < 0x80 ? 1 : b >= 0xF0 ? 4 : b >= 0xE0 ? 3 : b >= 0xC0 ? 2 : 1;
+        Bool cont = (b & 0xC0) == 0x80;
+        if (cont ? g_cmd_idx < CMD_BUFFER_SIZE - 1 : g_cmd_idx + need < CMD_BUFFER_SIZE) {
+            g_cmd_line[g_cmd_idx++] = c;
+            g_cmd_line[g_cmd_idx] = '\0';
+            if (!shell_input_masked()) kputc(c);
+            else if (!cont) kputc('*');               // one '*' per character
+        }
+    }
+}
+#endif // YESOS_WITH_LINEEDIT
 
 U0 shell_update(U0) {
     while (serial_has_char()) {

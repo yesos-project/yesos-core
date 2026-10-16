@@ -5,13 +5,16 @@
 #   PRODUCT          its name (nas, security, desktop, selftest)
 #   PRODUCT_C_SRCS   its C files (paths relative to the product root)
 #   CORE_MODULES     optional core modules it needs: vault packages dns
+#                    gfx (font, cell text) lineedit (console line editing)
+#   FORBIDDEN_SYMBOLS  symbol prefixes the image must not contain (optional;
+#                    the symbols of unselected modules are always forbidden)
 #   CORE             path of the core (default: core, the git submodule)
 #   RUST_DIR         its Rust crate (default: rust), a staticlib named "yesos"
 #                    that depends on $(CORE)/rust
 #
 # Result: yesos.elf, linked from the core, the chosen modules and the product
 # only, then proven (PMP layout, key-hart vector check, no floating point,
-# image hash). An image
+# no forbidden symbols, image hash). An image
 # never contains code of a module or product that was not selected.
 # =============================================================================
 
@@ -52,12 +55,18 @@ CORE_C_SRCS = $(addprefix $(CORE)/, \
          kernel/firewall.c kernel/security_pin.c kernel/netcfg.c \
          kernel/entropy.c kernel/cell.c kernel/keyhart.c \
          drivers/serial.c drivers/earcon.c drivers/timer.c drivers/ata.c drivers/pci.c drivers/virtio_blk.c drivers/virtio_net.c \
-         graphics/font_data.c graphics/font.c shell/shell.c)
+         shell/shell.c)
 
 # Optional core modules
+CORE_gfx_SRCS      = $(CORE)/graphics/font_data.c $(CORE)/graphics/font.c   # 8x16 font, cell text
+CORE_lineedit_SRCS =                                                        # console line editor and history (shell.c)
 CORE_vault_SRCS    = $(CORE)/kernel/vault.c $(CORE)/kernel/vault_shell.c   # encrypted /vault, key in the key hart
 CORE_packages_SRCS = $(CORE)/kernel/app_registry.c $(CORE)/kernel/ypkg.c   # .ypk apps run in PMP cells
 CORE_dns_SRCS      = $(CORE)/kernel/dnsblock.c                              # DNS filter (engine in Rust)
+
+# Symbols of the modules that were not selected must not be in the image.
+FORBIDDEN_SYMBOLS += $(if $(filter gfx,$(CORE_MODULES)),,font_ g_font_)
+FORBIDDEN_SYMBOLS += $(if $(filter lineedit,$(CORE_MODULES)),,ledit_)
 
 C_SRCS = $(CORE_C_SRCS) $(foreach mod,$(CORE_MODULES),$(CORE_$(mod)_SRCS)) $(PRODUCT_C_SRCS)
 CFLAGS += $(foreach mod,$(CORE_MODULES),-DYESOS_WITH_$(shell echo $(mod) | tr a-z A-Z))
@@ -77,6 +86,7 @@ define PMP_PROVE
 	fi
 	@python3 $(CORE)/tools/check_keyhart_vector.py $(1) || { rm -f $(1); exit 1; }
 	@python3 $(CORE)/tools/check_no_fp.py $(1) || { rm -f $(1); exit 1; }
+	@python3 $(CORE)/tools/check_symbols.py $(1) $(FORBIDDEN_SYMBOLS) || { rm -f $(1); exit 1; }
 	@python3 $(CORE)/tools/image_hash.py $(1) || { rm -f $(1); exit 1; }
 endef
 

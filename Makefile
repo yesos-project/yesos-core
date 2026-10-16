@@ -1,12 +1,12 @@
 # =============================================================================
 # YesOS core. Products (yesos-nas, yesos-security, yesos-desktop) include this
 # repository as the `core` submodule and build with core.mk. Here, `make`
-# builds the core self-test image (core + vault + packages + dns, no product) and
+# builds the core self-test image (core + every optional module, no product) and
 # `make test` runs the core's own suites on it.
 # =============================================================================
 PRODUCT = selftest
 CORE = .
-CORE_MODULES = vault packages dns
+CORE_MODULES = vault packages dns gfx lineedit
 PRODUCT_C_SRCS = selftest/product_selftest.c
 RUST_DIR = selftest/rust
 DISK_MB = 64

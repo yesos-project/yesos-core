@@ -1,5 +1,7 @@
 #include "cell.h"
+#ifdef YESOS_WITH_GFX
 #include "font.h"
+#endif
 #include "pmp.h"
 #include "smp.h"
 #include "timer.h"
@@ -501,8 +503,15 @@ static inline U32* cell_canvas(U32 k) {
 }
 
 // RPC text: string from the cell's data arena, rendered by hart 0 into the
-// cell's own canvas with clipping. The font stays in kernel memory.
+// cell's own canvas with clipping. The font stays in kernel memory (module
+// "gfx"; without it the call fails).
 static U0 cell_service_text(U32 k, CellMailbox* mb) {
+#ifndef YESOS_WITH_GFX
+    // Without the "gfx" module (no font in the image) text is refused.
+    (void)k;
+    mb->rpc_result = (U64)-1;
+}
+#else
     char str[128];
     if (!cell_copy_str(k, mb->rpc_args[2], str, sizeof(str))) {
         mb->rpc_result = (U64)-1;
@@ -525,6 +534,7 @@ static U0 cell_service_text(U32 k, CellMailbox* mb) {
     }
     mb->rpc_result = 0;
 }
+#endif // YESOS_WITH_GFX
 
 static U0 cell_service_rpc(U32 k, CellMailbox* mb) {
     U64 op = mb->rpc_op;
