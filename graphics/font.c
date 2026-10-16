@@ -26,5 +26,7 @@ const U8* font_glyph(U32 cp) {
         for (U32 r = 0; r < FONT_HEIGHT; r++)
             if (g_font_8x16[cp][r]) return g_font_8x16[cp];
     }
+    for (U32 i = 0; i < g_font_extra_count; i++)
+        if (g_font_extra_cp[i] == cp) return g_font_extra[i];
     return g_font_8x16['?'];
 }

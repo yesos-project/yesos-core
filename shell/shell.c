@@ -36,7 +36,8 @@ static const ShellExtension* g_ext[SHELL_MAX_EXTENSIONS];
 static U32 g_ext_count = 0;
 
 static char g_cmd_line[CMD_BUFFER_SIZE];
-static int g_cmd_idx = 0;
+static int g_cmd_idx = 0;           // length of the line
+static int g_cmd_pos = 0;           // cursor, byte offset (line editor below)
 
 // QEMU virt / SiFive test finisher (0x100000). On real boards without it the
 // hart just parks.
@@ -89,7 +90,7 @@ static U0 print_prompt(U0) {
 }
 
 U0 shell_init(U0) {
-    g_cmd_idx = 0;
+    g_cmd_idx = g_cmd_pos = 0;
     g_cmd_line[0] = '\0';
     kprintf("\n");
     kprintf("================================================================================\n");
@@ -590,38 +591,205 @@ static Bool input_is_masked(U0) {
     return shell_secret_prompt_active() || security_pin_is_locked();
 }
 
+// ---- line editor ----------------------------------------------------------------
+// The line is edited in place: left/right, Home/End, Delete, and up/down
+// through the last commands. Keys arrive as the escape sequences a terminal
+// sends (ESC [ A ... and ESC [ 3 ~, ESC O H ...), from the serial port or
+// from a product's keyboard. The echo uses only printing and '\b', so a
+// plain serial terminal and the Desktop screen show the same thing. A
+// UTF-8 character is inserted only when all its bytes have arrived.
+// Hidden input (PIN, passphrases) has no editing and never enters history.
+
+#define SHELL_HISTORY 16
+static char g_history[SHELL_HISTORY][CMD_BUFFER_SIZE];
+static U32  g_hist_count;           // commands stored (at most SHELL_HISTORY)
+static U32  g_hist_next;            // slot for the next one
+static U32  g_hist_back;            // 0 = the line being typed, n = n-th previous command
+static char g_hist_draft[CMD_BUFFER_SIZE];   // the line being typed while browsing
+static U8   g_esc;                  // 0 none, 1 after ESC, 2 after ESC [ or ESC O
+static U32  g_esc_num;
+static char g_utf8[4];
+static U32  g_utf8_have, g_utf8_need;
+
+static U32 utf8_chars(const char* s, int n) {
+    U32 k = 0;
+    for (int i = 0; i < n; i++) if (((U8)s[i] & 0xC0) != 0x80) k++;
+    return k;
+}
+
+static U0 echo_bytes(const char* s, int n) {
+    for (int i = 0; i < n; i++) kputc(s[i]);
+}
+
+static U0 echo_back(U32 chars) {
+    while (chars--) kputc('\b');
+}
+
+static int char_start_before(int pos) {
+    if (pos > 0) pos--;
+    while (pos > 0 && ((U8)g_cmd_line[pos] & 0xC0) == 0x80) pos--;
+    return pos;
+}
+
+static int char_end_after(int pos) {
+    if (pos < g_cmd_idx) pos++;
+    while (pos < g_cmd_idx && ((U8)g_cmd_line[pos] & 0xC0) == 0x80) pos++;
+    return pos;
+}
+
+// Remove bytes [from, to) and redraw from `from` (the cursor is there).
+static U0 delete_range(int from, int to) {
+    U32 removed = utf8_chars(g_cmd_line + from, to - from);
+    for (int i = to; i <= g_cmd_idx; i++) g_cmd_line[i - (to - from)] = g_cmd_line[i];
+    g_cmd_idx -= to - from;
+    g_cmd_pos = from;
+    echo_bytes(g_cmd_line + from, g_cmd_idx - from);
+    for (U32 i = 0; i < removed; i++) kputc(' ');
+    echo_back(utf8_chars(g_cmd_line + from, g_cmd_idx - from) + removed);
+}
+
+static U0 insert_bytes(const char* b, int n) {
+    if (g_cmd_idx + n >= CMD_BUFFER_SIZE) return;            // only whole characters
+    for (int i = g_cmd_idx; i >= g_cmd_pos; i--) g_cmd_line[i + n] = g_cmd_line[i];
+    for (int i = 0; i < n; i++) g_cmd_line[g_cmd_pos + i] = b[i];
+    g_cmd_idx += n;
+    echo_bytes(g_cmd_line + g_cmd_pos, g_cmd_idx - g_cmd_pos);
+    g_cmd_pos += n;
+    echo_back(utf8_chars(g_cmd_line + g_cmd_pos, g_cmd_idx - g_cmd_pos));
+}
+
+// Replace the whole line (history): erase what is shown, show the new one.
+static U0 replace_line(const char* text) {
+    echo_bytes(g_cmd_line + g_cmd_pos, g_cmd_idx - g_cmd_pos);   // cursor to the end
+    U32 shown = utf8_chars(g_cmd_line, g_cmd_idx);
+    echo_back(shown);
+    for (U32 i = 0; i < shown; i++) kputc(' ');
+    echo_back(shown);
+    StrNCpy(g_cmd_line, text, CMD_BUFFER_SIZE);
+    g_cmd_line[CMD_BUFFER_SIZE - 1] = '\0';
+    g_cmd_idx = g_cmd_pos = (int)StrLen(g_cmd_line);
+    echo_bytes(g_cmd_line, g_cmd_idx);
+}
+
+static const char* history_entry(U32 back) {          // 1 = the last command
+    return g_history[(g_hist_next + SHELL_HISTORY - back) % SHELL_HISTORY];
+}
+
+static U0 history_move(I32 dir) {                       // +1 older, -1 newer
+    if (dir > 0 && g_hist_back >= g_hist_count) return;
+    if (dir < 0 && g_hist_back == 0) return;
+    if (g_hist_back == 0) {
+        g_cmd_line[g_cmd_idx] = '\0';
+        StrNCpy(g_hist_draft, g_cmd_line, CMD_BUFFER_SIZE);
+    }
+    g_hist_back += dir;
+    replace_line(g_hist_back ? history_entry(g_hist_back) : g_hist_draft);
+}
+
+static U0 history_add(const char* line) {
+    while (*line == ' ') line++;
+    if (!*line) return;
+    if (g_hist_count && StrCmp(history_entry(1), line) == 0) return;   // no repeats in a row
+    StrNCpy(g_history[g_hist_next], line, CMD_BUFFER_SIZE);
+    g_history[g_hist_next][CMD_BUFFER_SIZE - 1] = '\0';
+    g_hist_next = (g_hist_next + 1) % SHELL_HISTORY;
+    if (g_hist_count < SHELL_HISTORY) g_hist_count++;
+}
+
+static U0 edit_key(char final, U32 num) {
+    if (input_is_masked()) return;                      // no editing of hidden input
+    if (final == 'A') history_move(1);
+    else if (final == 'B') history_move(-1);
+    else if (final == 'C' && g_cmd_pos < g_cmd_idx) {
+        int to = char_end_after(g_cmd_pos);
+        echo_bytes(g_cmd_line + g_cmd_pos, to - g_cmd_pos);
+        g_cmd_pos = to;
+    } else if (final == 'D' && g_cmd_pos > 0) {
+        g_cmd_pos = char_start_before(g_cmd_pos);
+        kputc('\b');
+    } else if (final == 'H' || (final == '~' && (num == 1 || num == 7))) {
+        echo_back(utf8_chars(g_cmd_line, g_cmd_pos));
+        g_cmd_pos = 0;
+    } else if (final == 'F' || (final == '~' && (num == 4 || num == 8))) {
+        echo_bytes(g_cmd_line + g_cmd_pos, g_cmd_idx - g_cmd_pos);
+        g_cmd_pos = g_cmd_idx;
+    } else if (final == '~' && num == 3 && g_cmd_pos < g_cmd_idx) {
+        delete_range(g_cmd_pos, char_end_after(g_cmd_pos));
+    }
+}
+
 static U0 process_char(char c) {
+    U8 b = (U8)c;
+    if (g_esc == 1) {
+        if (b == '[' || b == 'O') { g_esc = 2; g_esc_num = 0; return; }
+        g_esc = 0;                                      // a lone ESC: take b as it is
+    } else if (g_esc == 2) {
+        if (b >= '0' && b <= '9') { g_esc_num = g_esc_num * 10 + (b - '0'); return; }
+        if (b == ';') return;
+        g_esc = 0;
+        if (b >= 0x40 && b <= 0x7E) edit_key((char)b, g_esc_num);
+        return;
+    }
+    if (b == 0x1B) { g_esc = 1; g_utf8_have = 0; return; }
+
+    if (g_utf8_have) {                                  // inside a multi-byte character
+        if ((b & 0xC0) == 0x80) {
+            g_utf8[g_utf8_have++] = c;
+            if (g_utf8_have < g_utf8_need) return;
+            U32 n = g_utf8_have;
+            g_utf8_have = 0;
+            if (input_is_masked()) {
+                if (g_cmd_idx + (int)n < CMD_BUFFER_SIZE) {
+                    MemCpy(g_cmd_line + g_cmd_idx, g_utf8, n);
+                    g_cmd_idx += n;
+                    g_cmd_pos = g_cmd_idx;
+                    kputc('*');                         // one '*' per character
+                }
+            } else {
+                insert_bytes(g_utf8, (int)n);
+            }
+            return;
+        }
+        g_utf8_have = 0;                                // truncated: dropped, b starts afresh
+    }
+
     if (c == '\r' || c == '\n') {
         kprintf("\n");
         g_cmd_line[g_cmd_idx] = '\0';
         Bool was_secret = input_is_masked();
+        if (!was_secret) history_add(g_cmd_line);
+        g_hist_back = 0;
         shell_execute_command(g_cmd_line);
         if (was_secret) yc_wipe((U8*)g_cmd_line, sizeof(g_cmd_line));
-        g_cmd_idx = 0;
+        g_cmd_idx = g_cmd_pos = 0;
         g_cmd_line[0] = '\0';
         if (!shell_secret_prompt_active()) print_prompt();
     } else if (c == '\b' || c == 127) {
-        if (g_cmd_idx > 0) {
-            // Remove one whole character: UTF-8 continuation bytes, then its lead byte.
-            while (g_cmd_idx > 0 && ((U8)g_cmd_line[g_cmd_idx - 1] & 0xC0) == 0x80) g_cmd_idx--;
-            if (g_cmd_idx > 0) g_cmd_idx--;
-            g_cmd_line[g_cmd_idx] = '\0';
-            kputc('\b');
-            kputc(' ');
-            kputc('\b');
+        if (input_is_masked()) {
+            if (g_cmd_idx > 0) {
+                g_cmd_idx = g_cmd_pos = char_start_before(g_cmd_idx);
+                g_cmd_line[g_cmd_idx] = '\0';
+                kputc('\b'); kputc(' '); kputc('\b');
+            }
+        } else if (g_cmd_pos > 0) {
+            int from = char_start_before(g_cmd_pos);
+            echo_back(1);
+            delete_range(from, g_cmd_pos);
         }
-    } else if ((c >= 32 && c <= 126) || (U8)c >= 0x80) {
-        // Printable ASCII and UTF-8 bytes (accented letters, n with tilde...).
-        // A multi-byte character is kept only if it fits whole.
-        U8 b = (U8)c;
-        U32 need = b < 0x80 ? 1 : b >= 0xF0 ? 4 : b >= 0xE0 ? 3 : b >= 0xC0 ? 2 : 1;
-        Bool cont = (b & 0xC0) == 0x80;
-        if (cont ? g_cmd_idx < CMD_BUFFER_SIZE - 1 : g_cmd_idx + need < CMD_BUFFER_SIZE) {
-            g_cmd_line[g_cmd_idx++] = c;
-            g_cmd_line[g_cmd_idx] = '\0';
-            if (!input_is_masked()) kputc(c);
-            else if (!cont) kputc('*');               // one '*' per character
+    } else if (b >= 32 && b <= 126) {
+        if (input_is_masked()) {
+            if (g_cmd_idx + 1 < CMD_BUFFER_SIZE) {
+                g_cmd_line[g_cmd_idx++] = c;
+                g_cmd_pos = g_cmd_idx;
+                kputc('*');
+            }
+        } else {
+            insert_bytes(&c, 1);
         }
+    } else if (b >= 0xC0 && b < 0xF8) {                 // lead byte of a UTF-8 character
+        g_utf8[0] = c;
+        g_utf8_have = 1;
+        g_utf8_need = b >= 0xF0 ? 4 : b >= 0xE0 ? 3 : 2;
     }
 }
 
