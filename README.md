@@ -1,17 +1,36 @@
-# YesOS core (RISC-V)
+<div align="center">
+
+# YesOS core
+
+**The shared kernel of YesOS: bare-metal RISC-V in Machine mode,<br>
+isolated by a PMP layout that every build proves with Z3.**
+
+<img alt="RISC-V RV64GCV" src="https://img.shields.io/badge/RISC--V-RV64GCV-283272?logo=riscv&logoColor=white">
+<img alt="Machine mode only" src="https://img.shields.io/badge/runs%20in-Machine%20mode-4a5568">
+<img alt="PMP proven with Z3" src="https://img.shields.io/badge/PMP-proven%20with%20Z3-6b46c1">
+<img alt="No floating point" src="https://img.shields.io/badge/floating%20point-none%2C%20checked-2f855a">
+<img alt="License MIT" src="https://img.shields.io/badge/license-MIT-2b6cb0">
+
+[Products](#products) · [What it provides](#1-what-the-core-provides) · [Design choices](#2-design-choices) · [Build a product](#3-building-a-product-on-the-core) · [Security](#4-security-architecture) · [Limits](#8-honest-limits)
+
+</div>
+
+---
 
 The core of YesOS: a bare-metal operating system for RISC-V RV64GCV that runs
 entirely in Machine mode, isolated by a **locked, Z3-proven PMP**. There is no
 Linux, no libc and no binary blob.
+
+### Products
 
 Every YesOS product includes this repository as its `core` git submodule and
 selects only the parts it needs, so each image contains nothing else:
 
 | Product | Repository | What it adds |
 |---|---|---|
-| YesOS NAS | `yesos-nas` | file services (WebDAV, NAS protocol), web panel, accounts, snapshots, replication |
-| YesOS Security | `yesos-security` | invisible bridge firewall between the ONT and the router |
-| YesOS Desktop | `yesos-desktop` | the core, HD Audio, a desktop of overlapping windows (console, file browser, text viewer), virtio keyboard and tablet; features are added one at a time |
+| 🗄️ [YesOS NAS](https://github.com/yesos-project/yesos-nas) | `yesos-nas` | file services (WebDAV, NAS protocol), web panel, accounts, snapshots, replication |
+| 🛡️ [YesOS Security](https://github.com/yesos-project/yesos-security) | `yesos-security` | invisible bridge firewall between the ONT and the router |
+| 🖥️ [YesOS Desktop](https://github.com/yesos-project/yesos-desktop) | `yesos-desktop` | the core, HD Audio, a desktop of overlapping windows (console, file browser, text viewer), virtio keyboard and tablet; features are added one at a time |
 
 ## 1. What the core provides
 
