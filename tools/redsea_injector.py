@@ -213,7 +213,11 @@ def parse_curated_ramfs(ramfs_c_path):
 
     return files
 
-def sync_curated(disk_path, repo_root="."):
+def sync_curated(disk_path, repo_root=None):
+    # The core's sources, wherever this is run from (a product runs it with
+    # its working directory one level above the core).
+    if repo_root is None:
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ramfs_path = os.path.join(repo_root, "kernel", "ramfs.c")
     curated_files = parse_curated_ramfs(ramfs_path)
     if not curated_files:
