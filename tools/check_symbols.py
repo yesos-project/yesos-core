@@ -5,7 +5,7 @@ the given prefixes (local symbols included). core.mk forbids the symbols of
 every optional core module that was not selected (font_ g_font_ without
 "gfx", ledit_ without "lineedit"); a product adds its own with
 FORBIDDEN_SYMBOLS, e.g. NAS and Security forbid the Desktop drivers
-(hda_ display_ input_ terminal_ wav_ desktop_) so that none of them can be linked in
+(hda_ display_ input_ terminal_ wav_ desktop_ surf_) so that none of them can be linked in
 by mistake.
 
 Usage: check_symbols.py <kernel.elf> <prefix>...     (exit 1 on violation)

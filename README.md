@@ -11,7 +11,7 @@ selects only the parts it needs, so each image contains nothing else:
 |---|---|---|
 | YesOS NAS | `yesos-nas` | file services (WebDAV, NAS protocol), web panel, accounts, snapshots, replication |
 | YesOS Security | `yesos-security` | invisible bridge firewall between the ONT and the router |
-| YesOS Desktop | `yesos-desktop` | the core, HD Audio, a desktop with the console in a draggable window, virtio keyboard and tablet; features are added one at a time |
+| YesOS Desktop | `yesos-desktop` | the core, HD Audio, a desktop of overlapping windows (the console in one), virtio keyboard and tablet; features are added one at a time |
 
 ## 1. What the core provides
 
@@ -67,10 +67,10 @@ YesOS runs on an Orange Pi RV2.
 
 | | |
 |---|---|
-| Image code size (`.text`) | core self-test 341 KiB, Desktop 276 KiB, Security 357 KiB, NAS 754 KiB |
+| Image code size (`.text`) | core self-test 341 KiB, Desktop 281 KiB, Security 357 KiB, NAS 754 KiB |
 | PMP entries used (kernel hart) | 9 of 16 |
 | Floating-point instructions in the image | 0 (`tools/check_no_fp.py`) |
-| Test suites | core 8, NAS 9, Security 1 (64 checks), Desktop 5 (17 + 38 + 23 + 35 + 17 checks), all run under QEMU |
+| Test suites | core 8, NAS 9, Security 1 (64 checks), Desktop 5 (17 + 38 + 23 + 35 + 35 checks), all run under QEMU |
 
 ### Experimental work in `yesos-lab`
 
@@ -120,7 +120,7 @@ Its `Makefile` names its parts and includes `core/core.mk`:
 ```make
 PRODUCT = security
 CORE_MODULES = dns                  # optional core modules: vault packages dns gfx lineedit
-FORBIDDEN_SYMBOLS = hda_ display_ input_ terminal_ wav_ desktop_   # never link the Desktop's code
+FORBIDDEN_SYMBOLS = hda_ display_ input_ terminal_ wav_ desktop_ surf_   # never link the Desktop's code
 PRODUCT_C_SRCS = $(wildcard src/*.c)
 include core/core.mk                # yesos.elf: compile, link, prove
 ```
@@ -159,7 +159,7 @@ its services into the core without the core knowing them:
 layout cannot be proven, the key hart can reach a vector instruction outside
 `keyhart_vkey.S`, or it contains a floating-point instruction or a forbidden
 symbol. Measured code size (`.text`): NAS 754 KiB, Security 357 KiB,
-Desktop 276 KiB.
+Desktop 281 KiB.
 
 In this repository, `make` builds the core self-test image (core + vault +
 packages + dns, `selftest/`) and `make test` runs the core's suites on it:
