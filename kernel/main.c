@@ -25,6 +25,10 @@
 #include "vault.h"
 #include "netcfg.h"
 #include "product.h"
+#ifdef YESOS_WITH_MATH
+#include "yesmath.h"
+U0 ym_shell_register(U0);    // math/ym_shell.c
+#endif
 
 // YesOS core boot: serial console, memory, locked PMP, harts, storage,
 // network drivers, file systems, entropy and vault; the product (NAS,
@@ -77,6 +81,10 @@ U0 KernelMain(U0) {
     integrity_arm();
 
     // 11. Packages, LAN firewall of the stack, static address, product services, console PIN
+#ifdef YESOS_WITH_MATH
+    ym_init();                  // vector versions if this hart has V (mstatus.VS is on since boot)
+    ym_shell_register();
+#endif
 #ifdef YESOS_WITH_PACKAGES
     app_registry_init();
     app_registry_register_shell();

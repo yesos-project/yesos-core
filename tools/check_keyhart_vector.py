@@ -8,7 +8,14 @@ Walks the static call graph of the linked ELF from `keyhart_loop_entry`
 primitives in kernel/keyhart_vkey.S may contain vector instructions.
 Indirect calls cannot be followed statically and make the check fail.
 
-Usage: check_keyhart_vector.py <kernel.elf>     (exit 1 on violation)
+The same walk proves the trap path vector-free (core.mk runs both): a trap
+saves only the vector CSRs, so no handler may touch v0-v31, or an interrupt
+would corrupt the vector loop it interrupted. There the only vector
+instruction allowed is the vsetvl in trap_vector that restores vtype and vl:
+
+    check_keyhart_vector.py <kernel.elf> --root trap_vector --allow trap_vector:vsetvl
+
+Usage: check_keyhart_vector.py <kernel.elf> [--root FN --allow FN[:INSN],...]   (exit 1 on violation)
 """
 import re
 import subprocess
@@ -55,7 +62,20 @@ def owner(funcs, addr):
 
 
 def main():
-    elf = sys.argv[1]
+    global ROOT, ALLOWED_VECTOR
+    args = sys.argv[1:]
+    elf = args.pop(0)
+    allowed_insn = {}
+    if "--root" in args:
+        ROOT = args[args.index("--root") + 1]
+        ALLOWED_VECTOR = set()
+        if "--allow" in args:
+            for a in args[args.index("--allow") + 1].split(","):
+                fn, _, insn = a.partition(":")
+                if insn:
+                    allowed_insn.setdefault(fn, set()).add(insn)
+                else:
+                    ALLOWED_VECTOR.add(fn)
     funcs = functions(elf)
     by_name = {}
     for f in funcs:
@@ -87,7 +107,7 @@ def main():
         seen.add(f[2])
         auipc = {}
         for addr, (mn, ops) in body(f):
-            if VECTOR_RE.match(mn) and f[2] not in ALLOWED_VECTOR:
+            if VECTOR_RE.match(mn) and f[2] not in ALLOWED_VECTOR and mn not in allowed_insn.get(f[2], ()):
                 problems.append(f"{f[2]} uses vector instruction '{mn}' at 0x{addr:x}")
             targets = []
             if mn == "jal":
@@ -115,7 +135,10 @@ def main():
         for p in problems:
             print("  VIOLATION:", p)
         sys.exit(1)
-    print("check_keyhart_vector: OK - no vector instruction outside kernel/keyhart_vkey.S")
+    if ROOT == "keyhart_loop_entry":
+        print("check_keyhart_vector: OK - no vector instruction outside kernel/keyhart_vkey.S")
+    else:
+        print(f"check_keyhart_vector: OK - no vector instruction reachable from {ROOT} except the allowed ones")
 
 
 if __name__ == "__main__":

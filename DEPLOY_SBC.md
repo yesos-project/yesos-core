@@ -6,6 +6,15 @@ controllers have no driver yet, so an image booted on a board reaches the
 console but has neither disk nor network. Porting those drivers is the next
 step once the hardware is available.
 
+**The JH7110 image does not boot at all.** Its U74 cores have no vector
+extension and no Zbc, but the image is built with both: clang emits vector
+instructions for struct copies throughout the core, the trap handler saves
+the vector CSRs, the key hart keeps the vault key in vector registers and
+RedSea's checksum uses `clmul`. In QEMU with a U74-like CPU (no V, no Zbc) the
+boot stops after its first line. A JH7110 build needs its own `-march`, a
+trap handler without vector CSRs, another home for the vault key and a
+scalar checksum.
+
 ## Building a board image
 
 Every product (`yesos-nas`, `yesos-security`, `yesos-desktop`) can build one,
@@ -23,7 +32,7 @@ count still has to be measured on the board.
 | | Orange Pi RV2 | StarFive VisionFive 2 (JH7110) |
 | :--- | :--- | :--- |
 | SoC | SpacemiT Ky X1, 8 cores | JH7110, 4 x SiFive U74 |
-| Vector (RVV 1.0) | yes | no |
+| Vector (RVV 1.0) | yes | no: the current image does not boot (see above) |
 | Ethernet | 2 x Gigabit | 2 x Gigabit |
 | Zkr (hardware entropy) | to be checked | no: keys from a weak source (YesOS warns) |
 | U-Boot load address | `0x01400000` | `0x40200000` |

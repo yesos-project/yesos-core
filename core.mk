@@ -6,6 +6,7 @@
 #   PRODUCT_C_SRCS   its C files (paths relative to the product root)
 #   CORE_MODULES     optional core modules it needs: vault packages dns
 #                    gfx (font, cell text) lineedit (console line editing)
+#                    math (yesmath: integer math, scalar + RVV, `math` command)
 #   FORBIDDEN_SYMBOLS  symbol prefixes the image must not contain (optional;
 #                    the symbols of unselected modules are always forbidden)
 #   CORE             path of the core (default: core, the git submodule)
@@ -13,7 +14,7 @@
 #                    that depends on $(CORE)/rust
 #
 # Result: yesos.elf, linked from the core, the chosen modules and the product
-# only, then proven (PMP layout, key-hart vector check, no floating point,
+# only, then proven (PMP layout, key-hart and trap-path vector checks, no floating point,
 # no forbidden symbols, image hash). An image
 # never contains code of a module or product that was not selected.
 # =============================================================================
@@ -63,10 +64,13 @@ CORE_lineedit_SRCS =                                                        # co
 CORE_vault_SRCS    = $(CORE)/kernel/vault.c $(CORE)/kernel/vault_shell.c   # encrypted /vault, key in the key hart
 CORE_packages_SRCS = $(CORE)/kernel/app_registry.c $(CORE)/kernel/ypkg.c   # .ypk apps run in PMP cells
 CORE_dns_SRCS      = $(CORE)/kernel/dnsblock.c                              # DNS filter (engine in Rust)
+CORE_math_SRCS     = $(addprefix $(CORE)/math/, ym_math.c ym_rvv.c ym_dispatch.c ym_tables.c \
+                     ym_selftest.c ym_shell.c)                              # yesmath (tables 36 KiB)
 
 # Symbols of the modules that were not selected must not be in the image.
 FORBIDDEN_SYMBOLS += $(if $(filter gfx,$(CORE_MODULES)),,font_ g_font_)
 FORBIDDEN_SYMBOLS += $(if $(filter lineedit,$(CORE_MODULES)),,ledit_)
+FORBIDDEN_SYMBOLS += $(if $(filter math,$(CORE_MODULES)),,ym_)
 
 C_SRCS = $(CORE_C_SRCS) $(foreach mod,$(CORE_MODULES),$(CORE_$(mod)_SRCS)) $(PRODUCT_C_SRCS)
 CFLAGS += $(foreach mod,$(CORE_MODULES),-DYESOS_WITH_$(shell echo $(mod) | tr a-z A-Z))
@@ -85,6 +89,7 @@ define PMP_PROVE
 		echo "WARNING: Z3 prover not installed (make prover-setup); $(1) boots with runtime PMP verification only"; \
 	fi
 	@python3 $(CORE)/tools/check_keyhart_vector.py $(1) || { rm -f $(1); exit 1; }
+	@python3 $(CORE)/tools/check_keyhart_vector.py $(1) --root trap_vector --allow trap_vector:vsetvl || { rm -f $(1); exit 1; }
 	@python3 $(CORE)/tools/check_no_fp.py $(1) || { rm -f $(1); exit 1; }
 	@python3 $(CORE)/tools/check_symbols.py $(1) $(FORBIDDEN_SYMBOLS) || { rm -f $(1); exit 1; }
 	@python3 $(CORE)/tools/image_hash.py $(1) || { rm -f $(1); exit 1; }

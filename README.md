@@ -48,7 +48,7 @@ selects only the parts it needs, so each image contains nothing else:
 | Shell | `shell/shell.c` (serial console; UTF-8 input, so accented letters and ñ can be typed; line editing with arrows, Home, End, Delete and a 16-command history in module `lineedit`, none of it for hidden input) |
 | Font (module `gfx`) | `fonts/yesos-8x16.txt` → `graphics/font_data.c` (`tools/gen_font.py`): 8x16, 151 glyphs: printable ASCII, the Latin-1 letters and signs of Spanish and the Western languages' accented vowels, and €; used by cell text and the Desktop screen |
 | Rust | `rust/` (crate `yesos_core`: allocator, crypto + DRBG, packet filter; optional DNS engine and frame parser) |
-| Optional modules | `vault` (`kernel/vault.c`, `kernel/vault_shell.c`), `packages` (`kernel/app_registry.c`, `kernel/ypkg.c`, `apps/`), `dns` (`kernel/dnsblock.c` + `rust/src/dns.rs`) |
+| Optional modules | `vault` (`kernel/vault.c`, `kernel/vault_shell.c`), `packages` (`kernel/app_registry.c`, `kernel/ypkg.c`, `apps/`), `dns` (`kernel/dnsblock.c` + `rust/src/dns.rs`), `math` (`math/`, `include/yesmath.h`) |
 | Host tools | `tools/redsea_fsck.py`, `tools/redsea_injector.py`, `tools/deploy_app.py`, `tools/yesos_harness.py` (QEMU test harness), `tools/dns_wire.py` |
 
 ## 2. Design choices
@@ -86,10 +86,10 @@ YesOS runs on an Orange Pi RV2.
 
 | | |
 |---|---|
-| Image code size (`.text`) | core self-test 339 KiB, Desktop 289 KiB, Security 355 KiB, NAS 752 KiB |
+| Image code size (`.text`) | core self-test 384 KiB (all modules; `math` adds 45), Desktop 289 KiB, Security 355 KiB, NAS 752 KiB |
 | PMP entries used (kernel hart) | 9 of 16 |
 | Floating-point instructions in the image | 0 (`tools/check_no_fp.py`) |
-| Test suites | core 9, NAS 9, Security 1 (64 checks), Desktop 7 (17 + 38 + 23 + 35 + 35 + 30 + 24 checks), all run under QEMU |
+| Test suites | core 10, NAS 9, Security 1 (64 checks), Desktop 7 (17 + 38 + 23 + 35 + 35 + 30 + 24 checks), all run under QEMU |
 
 ### Experimental work in `yesos-lab`
 
@@ -138,7 +138,7 @@ Its `Makefile` names its parts and includes `core/core.mk`:
 
 ```make
 PRODUCT = security
-CORE_MODULES = dns                  # optional core modules: vault packages dns gfx lineedit
+CORE_MODULES = dns                  # optional core modules: vault packages dns gfx lineedit math
 FORBIDDEN_SYMBOLS = hda_ audio_ display_ input_ terminal_ wav_ desktop_ surf_ files_   # never link the Desktop's code
 PRODUCT_C_SRCS = $(wildcard src/*.c)
 include core/core.mk                # yesos.elf: compile, link, prove
@@ -151,6 +151,7 @@ include core/core.mk                # yesos.elf: compile, link, prove
 | `dns` | DNS filter (engine in Rust) | Security |
 | `gfx` | the 8x16 font and the cells' text call (refused without it) | Desktop |
 | `lineedit` | console line editing and history (without it: type and backspace only) | Desktop |
+| `math` | yesmath: integer math (log/exp/sqrt, sin, atan2), audio DSP, blur, memcpy; scalar and RVV versions with identical results; `math` command ([`math/README.md`](math/README.md)) | none yet (core self-test) |
 
 A product gets only what it names, and less code is less attack surface:
 NAS and Security have no font, no line editor and none of the Desktop's
@@ -176,7 +177,8 @@ its services into the core without the core knowing them:
 
 `make` in a product links `yesos.elf` and fails, deleting it, if the PMP
 layout cannot be proven, the key hart can reach a vector instruction outside
-`keyhart_vkey.S`, or it contains a floating-point instruction or a forbidden
+`keyhart_vkey.S`, the trap path can reach one (other than the `vsetvl` that
+restores vtype and vl), or it contains a floating-point instruction or a forbidden
 symbol. Measured code size (`.text`): NAS 752 KiB, Security 355 KiB,
 Desktop 289 KiB.
 
@@ -191,7 +193,7 @@ sudo apt install -y git make clang lld llvm qemu-system-misc python3 python3-ven
 rustup target add riscv64gc-unknown-none-elf
 make prover-setup        # once: Z3 in tools/.venv
 make                     # yesos.elf: links, proves the PMP layout, checks the key hart, hashes the image
-make test                # test_pmp, test_cells, test_integrity, test_packages, test_dns, test_timer, test_pci, test_line_edit, test_checksum
+make test                # test_pmp, test_cells, test_integrity, test_packages, test_dns, test_timer, test_pci, test_line_edit, test_checksum, test_math
 make run                 # serial console in the terminal (Ctrl-A X to quit)
 ```
 
@@ -290,6 +292,8 @@ Hart 0 asks it, through a mailbox, to create/unwrap/re-wrap the key and to seal/
 
 Because clang emits vector instructions even for plain C struct copies, `keyhart.c` is built without the V extension and `tools/check_keyhart_vector.py` walks the call graph of the linked kernel from the key hart's loop on every build: any reachable vector instruction outside `keyhart_vkey.S`, or any indirect call, fails the build.
 
+**Vector state on the other harts.** Vector registers belong to each hart, so vector code on hart 0 (the `math` module, the compiler's struct copies) never touches the key hart's. Tasks on a hart switch cooperatively through a function call, and the calling convention makes v0-v31 caller-saved, so a switch need not save them. A trap saves only vtype, vl, vstart and vcsr; that is enough because the same tool proves on every build that nothing reachable from `trap_vector` uses a vector register (`--root trap_vector`; a vector instruction put into the timer handler on purpose fails the build).
+
 **What this does and does not give:** Machine-mode code on hart 0 (a bug, a malicious console script) can no longer *extract* the vault key; once the vault is locked it cannot decrypt anything. While unlocked it can still *request* decryptions. The key does not reside in RAM, so reading memory physically does not reveal it; the Argon2-derived KEK touches private RAM briefly during unlock (then wiped), and a new key touches it briefly at creation.
 
 ### Integrity monitor (key hart) — `include/integrity.h`, `tools/image_hash.py`
@@ -381,7 +385,7 @@ Network     net  ping [ip]  net bench  net ip <a.b.c.d/nn> [gw <ip>] | default  
 Isolation   pmp  pmp test  cell  cell test  cell run <f.HQ> [n]  keyhart test  integrity
 HolyQ       run <f.HQ>  jit <code>  jit bench|rvv|disasm <fn>   (console: full privileges)
 System      sysinfo  mem  hardening  smp  uptime  tasks  ata  pci  clear  reboot  poweroff
-Modules     vault [status|init|unlock|lock|passwd]   pkg [list|install|run|remove]
+Modules     vault [status|init|unlock|lock|passwd]   pkg [list|install|run|remove]   math [test]
             dns [status|log|on|off|flush|test <d>|allow|block|unallow|unblock <d>|upstream <ip>...|auto|doh|list add|on|off|delete]
 ```
 
@@ -393,6 +397,7 @@ Modules     vault [status|init|unlock|lock|passwd]   pkg [list|install|run|remov
 - The RedSea directory holds 16384 entries in total.
 - No performance benchmarks yet: QEMU does not model cycles, so they wait for real hardware.
 - Without Zkr (e.g. JH7110) keys come from a weak source, and the system says so.
+- No image runs on a hart without the V extension (the JH7110's U74 cores): clang emits vector instructions for plain struct copies throughout the core, the trap handler saves the vector CSRs and the key hart keeps the vault key in vector registers. Checked in QEMU with a U74-like CPU (no V, no Zbc): the boot stops after its first line.
 
 ## 9. Support YesOS
 
