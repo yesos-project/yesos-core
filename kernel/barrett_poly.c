@@ -4,7 +4,8 @@
 #include "memory.h"
 
 // ----------------------------------------------------------------------------
-// Barrett Polynomial Reduction in GF(2) using RISC-V Zbc (clmul / clmulh)
+// RedSea's checksum (see barrett_poly.h): Barrett reduction in GF(2) with the
+// RISC-V Zbc carry-less multiply (clmul / clmulh).
 // ----------------------------------------------------------------------------
 
 static inline U64 rv_clmul(U64 a, U64 b) {
@@ -69,141 +70,57 @@ U64 barrett_crc64_sector(const U8* data, size_t len) {
     return crc ^ 0xFFFFFFFFFFFFFFFFULL;
 }
 
-// 4-Way Parallel Pipelined Folding for >10 GB/s Throughput
-U64 barrett_crc64_stream_parallel4(const U8* data, size_t len) {
+// ----------------------------------------------------------------------------
+// Console demo: the Zbc version checked against the same function computed
+// one bit at a time, then its speed (QEMU wall clock)
+// ----------------------------------------------------------------------------
+
+// The same checksum without Zbc: each word is multiplied by x^64 mod P one
+// bit at a time (a shift, and P subtracted when the top bit falls out).
+static U64 checksum_bitwise_ref(const U8* data, size_t len) {
     if (!data || len == 0) return 0;
-
-    const U64* words = (const U64*)data;
-    size_t num_quads = len / 32; // 4 words (32 bytes) per iteration
-
-    U64 acc0 = 0xFFFFFFFFFFFFFFFFULL;
-    U64 acc1 = 0;
-    U64 acc2 = 0;
-    U64 acc3 = 0;
-
-    for (size_t i = 0; i < num_quads; i++) {
-        // Parallel folding into 4 independent accumulators (no loop-carried dependencies)
-        U64 w0 = words[i * 4 + 0];
-        U64 w1 = words[i * 4 + 1];
-        U64 w2 = words[i * 4 + 2];
-        U64 w3 = words[i * 4 + 3];
-
-        acc0 = barrett_poly_reduce_128(acc0 ^ w0, 0);
-        acc1 = barrett_poly_reduce_128(acc1 ^ w1, 0);
-        acc2 = barrett_poly_reduce_128(acc2 ^ w2, 0);
-        acc3 = barrett_poly_reduce_128(acc3 ^ w3, 0);
-    }
-
-    // Combine 4 accumulators with power-of-x shifts
-    U64 combined = acc0 ^ acc1 ^ acc2 ^ acc3;
-
-    // Process remainder words
-    size_t processed = num_quads * 32;
-    size_t rem_bytes = len - processed;
-    if (rem_bytes > 0) {
-        const U8* rem_data = data + processed;
-        size_t rem_words = rem_bytes / 8;
-        for (size_t j = 0; j < rem_words; j++) {
-            U64 w = ((const U64*)rem_data)[j];
-            combined = barrett_poly_reduce_128(combined ^ w, 0);
-        }
-    }
-
-    return combined ^ 0xFFFFFFFFFFFFFFFFULL;
-}
-
-// ----------------------------------------------------------------------------
-// Axiomatic Verification & Hardware Benchmark Suite
-// ----------------------------------------------------------------------------
-
-// Software bit-by-bit reference for validation
-static U64 software_crc64_ref(const U8* data, size_t len) {
     U64 crc = 0xFFFFFFFFFFFFFFFFULL;
-    for (size_t i = 0; i < len; i++) {
-        crc ^= (U64)data[i];
-        for (int b = 0; b < 8; b++) {
-            if (crc & 1) {
-                crc = (crc >> 1) ^ 0xC96C5795D7870F42ULL; // reversed CRC-64-ECMA
-            } else {
-                crc >>= 1;
-            }
-        }
+    for (size_t i = 0; i < len; i += 8) {
+        U64 w = 0;
+        for (size_t k = 0; k < 8 && i + k < len; k++) w |= (U64)data[i + k] << (8 * k);
+        crc ^= w;
+        for (int b = 0; b < 64; b++) crc = (crc << 1) ^ ((crc >> 63) ? BARRETT_POLY_LO : 0);
     }
     return crc ^ 0xFFFFFFFFFFFFFFFFULL;
 }
 
 U0 barrett_poly_benchmark(U0) {
-    kprintf("\n================ [ BARRETT POLYNOMIAL REDUCTION IN GF(2) (Zbc clmul) ] ================\n");
-    kprintf("Generator Poly  : CRC-64-ECMA (P(x) = x^64 + x^62 + ... + 1)\n");
-    kprintf("Precomputed mu  : 0x%p [Floor(x^128 / P(x)) in GF(2)]\n", (void*)BARRETT_MU_LO);
-    kprintf("Hardware Engine : RISC-V Zbc (Carry-Less Multiplication clmul & clmulh)\n\n");
+    kprintf("\n================ [ REDSEA CHECKSUM (Barrett reduction, Zbc clmul) ] ================\n");
+    kprintf("Per little-endian 64-bit word: crc = (crc ^ w) * x^64 mod P, P = CRC-64-ECMA (MSB first).\n");
+    kprintf("A polynomial code of its own, not the standard CRC-64/XZ or ECMA-182. RedSea keeps 32 bits.\n\n");
 
-    // 1. Axiomatic Verification on 512-Byte Sector
     U8 sector[512];
-    for (int i = 0; i < 512; i++) {
-        sector[i] = (U8)((i * 109 + 37) & 0xFF);
+    for (int i = 0; i < 512; i++) sector[i] = (U8)((i * 109 + 37) & 0xFF);
+
+    Bool all = TRUE;
+    static const U32 sizes[2] = { 512, 509 };           // whole words, and a short last word
+    for (U32 k = 0; k < 2; k++) {
+        U64 zbc = barrett_crc64_sector(sector, sizes[k]);
+        U64 ref = checksum_bitwise_ref(sector, sizes[k]);
+        all = all && zbc == ref;
+        kprintf("  %u bytes: Zbc 0x%p, bit by bit 0x%p [%s]\n", (U64)sizes[k], (void*)zbc, (void*)ref,
+                zbc == ref ? "MATCH" : "MISMATCH");
     }
+    U64 crc = barrett_crc64_sector(sector, 512);
+    sector[256] ^= 0x01;
+    U64 flipped = barrett_crc64_sector(sector, 512);
+    sector[256] ^= 0x01;
+    all = all && flipped != crc;
+    kprintf("  One bit flipped: 0x%p [%s]\n", (void*)flipped, flipped != crc ? "DETECTED" : "NOT DETECTED");
 
-    U64 crc_barrett = barrett_crc64_sector(sector, 512);
-    U64 crc_p4 = barrett_crc64_stream_parallel4(sector, 512);
-    U64 crc_ref = software_crc64_ref(sector, 512);
-
-    kprintf("[1. SECTOR INTEGRITY TEST (512 Bytes)]:\n");
-    kprintf("  - Software CRC64 Ref   : 0x%p\n", (void*)crc_ref);
-    kprintf("  - Barrett Sector CRC64 : 0x%p [%s]\n", (void*)crc_barrett,
-            (crc_barrett != 0) ? "PASS" : "FAIL");
-    kprintf("  - 4-Way Pipelined CRC64: 0x%p\n", (void*)crc_p4);
-
-    // Bit-flip corruption detection test
-    sector[256] ^= 0x01; // 1-bit corruption
-    U64 crc_corrupt = barrett_crc64_sector(sector, 512);
-    sector[256] ^= 0x01; // Restore
-
-    if (crc_corrupt != crc_barrett) {
-        kprintf("  - Bit-Flip Detection   : [PASS] (Corrupted CRC: 0x%p != 0x%p)\n",
-                (void*)crc_corrupt, (void*)crc_barrett);
-    } else {
-        kprintf("  - Bit-Flip Detection   : [FAIL]\n");
-    }
-
-    // 2. High-Speed Benchmark: 100,000 Sectors (50 MB)
     U32 num_sectors = 100000;
-    kprintf("\n[2. HARDWARE THROUGHPUT BENCHMARK (100,000 Sectors = 50 MB)]:\n");
-
     U64 t0 = timer_get_uptime_ms();
-    volatile U64 dummy_accum = 0;
-    for (U32 s = 0; s < num_sectors; s++) {
-        dummy_accum ^= barrett_crc64_sector(sector, 512);
-    }
-    U64 t1 = timer_get_uptime_ms();
-    U64 dt_scalar = (t1 > t0) ? (t1 - t0) : 1;
-
-    U64 mb_total = (num_sectors * 512) / (1024 * 1024);
-    U32 ksectors_sec_scalar = (U32)((num_sectors * 1000) / (dt_scalar * 1000));
-
-    kprintf("  - Scalar Barrett Time  : %u ms for %u MB (hash=0x%x)\n",
-            (U32)dt_scalar, (U32)mb_total, (U32)dummy_accum);
-    kprintf("  - Scalar Throughput    : %u MB/sec (~%u ksectors/sec)\n",
-            (U32)((mb_total * 1000) / dt_scalar), ksectors_sec_scalar);
-
-    // 3. 4-Way Pipelined Benchmark
-    U64 t2 = timer_get_uptime_ms();
-    volatile U64 dummy_p4 = 0;
-    for (U32 s = 0; s < num_sectors; s++) {
-        dummy_p4 ^= barrett_crc64_stream_parallel4(sector, 512);
-    }
-    U64 t3 = timer_get_uptime_ms();
-    U64 dt_p4 = (t3 > t2) ? (t3 - t2) : 1;
-
-    U32 mb_sec_p4 = (U32)((mb_total * 1000) / dt_p4);
-    U32 gb_sec_p4 = mb_sec_p4 / 1024;
-
-    kprintf("\n  - 4-Way Pipelined Time : %u ms for %u MB (hash=0x%x)\n",
-            (U32)dt_p4, (U32)mb_total, (U32)dummy_p4);
-    kprintf("  - Pipelined Throughput : %u MB/sec (~%u.%u GB/sec)\n",
-            mb_sec_p4, gb_sec_p4, (mb_sec_p4 % 1024) / 100);
-
-    kprintf("\n========================================================================================\n");
-    kprintf("[RESULT] Barrett GF(2) Hardware Polynomial Engine Verified & Active in RedSea!\n");
-    kprintf("========================================================================================\n\n");
+    volatile U64 sink = 0;
+    for (U32 s = 0; s < num_sectors; s++) sink ^= barrett_crc64_sector(sector, 512);
+    U64 dt = timer_get_uptime_ms() - t0;
+    if (dt == 0) dt = 1;
+    kprintf("\n  %u sectors of 512 bytes in %u ms of QEMU wall clock (%u MB/s here; not a hardware figure)\n",
+            (U64)num_sectors, dt, (U64)num_sectors * 512 / 1000 / dt);
+    kprintf("\n[RESULT] %s\n\n", all ? "checksum OK: Zbc matches the bit-by-bit reference, a flipped bit is detected"
+                                       : "checksum FAILED");
 }

@@ -42,7 +42,7 @@ selects only the parts it needs, so each image contains nothing else:
 | Key hart and integrity | `kernel/keyhart.c`, `kernel/keyhart_vkey.S`, `tools/check_keyhart_vector.py`, `tools/image_hash.py` |
 | Build checks | `tools/pmp_prover.py` (Z3), `tools/check_keyhart_vector.py`, `tools/check_no_fp.py`, `tools/check_symbols.py`, `tools/image_hash.py` |
 | Drivers | `drivers/pci.c` (PCIe enumeration, one BAR allocator), `drivers/virtio_blk.c`, `drivers/ata.c` (block front end), `drivers/virtio_net.c` (up to 3 NICs, ARP/IPv4/UDP/ICMP), `drivers/serial.c`, `drivers/timer.c`, `drivers/earcon.c` |
-| Storage | `kernel/redsea_eml.c` (RedSea v4), `kernel/barrett_poly.c` (CRC64), `kernel/vfs.c`, `kernel/ramfs.c`, `kernel/lz4.c` |
+| Storage | `kernel/redsea_eml.c` (RedSea v4), `kernel/barrett_poly.c` (RedSea's checksum), `kernel/vfs.c`, `kernel/ramfs.c`, `kernel/lz4.c` |
 | Security services | `kernel/entropy.c`, `kernel/security_pin.c` (console PIN), `kernel/firewall.c` (RFC 1918 filter of the system's own stack), `kernel/netcfg.c` (static address) |
 | HolyQ | `kernel/holyq_*.c` (JIT for the console, compiler for cell programs) |
 | Shell | `shell/shell.c` (serial console; UTF-8 input, so accented letters and ñ can be typed; line editing with arrows, Home, End, Delete and a 16-command history in module `lineedit`, none of it for hidden input) |
@@ -59,7 +59,7 @@ selects only the parts it needs, so each image contains nothing else:
 | **Integer-only kernel** | No floating-point instruction anywhere in the image; fractions use fixed point. Kernel behaviour never depends on FPU rounding modes or IEEE 754 corner cases. | `tools/check_no_fp.py` disassembles every image and deletes it if it finds one (compressed forms included). |
 | **Untrusted code on its own core** | Apps run in PMP cells on dedicated harts, never on the kernel hart. | Per-cell PMP proof, instruction verifier, watchdog. |
 | **A key that never touches memory** | The vault key lives only in vector registers of the key hart. | `tools/check_keyhart_vector.py` walks the call graph at every build. |
-| **Hardware CRC on every file** | RedSea stores a CRC64 per file, computed by Barrett reduction with the Zbc carry-less multiply (`clmul`). | `kernel/barrett_poly.c`; checked by `fsck` and the RedSea tests. |
+| **Hardware checksum on every file** | RedSea stores 32 bits of a 64-bit polynomial checksum per file, computed by Barrett reduction with the Zbc carry-less multiply (`clmul`): crc = (crc ^ w) x^64 mod P per 64-bit word, P the CRC-64-ECMA polynomial. A code of its own, not the standard CRC-64/XZ or ECMA-182. | `kernel/barrett_poly.c`; `tools/test_checksum.py` checks it against a bit-by-bit reference and `tools/redsea_fsck.py`; checked by `fsck` and the RedSea tests. |
 | **No libc, no blobs** | C freestanding, Rust `no_std` and assembly. The only outside code is Rust crates (RustCrypto, rustls) built from source at versions pinned in `Cargo.lock`. | The image hash is checked at boot and re-verified by the integrity monitor. |
 
 Two precise notes on the integer-only rule: the boot code resets the FP status
@@ -89,7 +89,7 @@ YesOS runs on an Orange Pi RV2.
 | Image code size (`.text`) | core self-test 341 KiB, Desktop 291 KiB, Security 357 KiB, NAS 754 KiB |
 | PMP entries used (kernel hart) | 9 of 16 |
 | Floating-point instructions in the image | 0 (`tools/check_no_fp.py`) |
-| Test suites | core 8, NAS 9, Security 1 (64 checks), Desktop 7 (17 + 38 + 23 + 35 + 35 + 30 + 24 checks), all run under QEMU |
+| Test suites | core 9, NAS 9, Security 1 (64 checks), Desktop 7 (17 + 38 + 23 + 35 + 35 + 30 + 24 checks), all run under QEMU |
 
 ### Experimental work in `yesos-lab`
 
@@ -191,7 +191,7 @@ sudo apt install -y git make clang lld llvm qemu-system-misc python3 python3-ven
 rustup target add riscv64gc-unknown-none-elf
 make prover-setup        # once: Z3 in tools/.venv
 make                     # yesos.elf: links, proves the PMP layout, checks the key hart, hashes the image
-make test                # test_pmp, test_cells, test_integrity, test_packages, test_dns, test_timer, test_pci, test_line_edit
+make test                # test_pmp, test_cells, test_integrity, test_packages, test_dns, test_timer, test_pci, test_line_edit, test_checksum
 make run                 # serial console in the terminal (Ctrl-A X to quit)
 ```
 
@@ -312,7 +312,7 @@ Limits: only code and read-only data are covered (mutable data changes legitimat
   - snapshot files being read-only;
   - the free map: inside the data area, sorted, never covering used sectors, and its total;
   - lost sectors (neither used nor free).
-- **Data:** every file is read and its CRC compared with the stored one. That is the kernel's Barrett CRC64, or the old checksum of files injected by earlier host tools.
+- **Data:** every file is read and its checksum compared with the stored one: the low 32 bits of the kernel's Barrett checksum (see above), or the old checksum of files injected by earlier host tools.
 
 `tools/redsea_fsck.py <image>` runs the same checks on an image from the PC, with a table-driven port of the kernel CRC. `tools/redsea_injector.py` now stores the kernel CRC as well.
 
