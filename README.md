@@ -28,9 +28,9 @@ selects only the parts it needs, so each image contains nothing else:
 
 | Product | Repository | What it adds |
 |---|---|---|
-| 🗄️ [YesOS NAS](https://github.com/yesos-project/yesos-nas) | `yesos-nas` | file services (WebDAV, NAS protocol), web panel, accounts, snapshots, replication |
-| 🛡️ [YesOS Security](https://github.com/yesos-project/yesos-security) | `yesos-security` | invisible bridge firewall between the ONT and the router |
-| 🖥️ [YesOS Desktop](https://github.com/yesos-project/yesos-desktop) | `yesos-desktop` | the core, HD Audio, a desktop of overlapping windows (console, file browser, text viewer), virtio keyboard and tablet; features are added one at a time |
+| [YesOS NAS](https://github.com/yesos-project/yesos-nas) | `yesos-nas` | file services (WebDAV, NAS protocol), web panel, accounts, snapshots, replication |
+| [YesOS Security](https://github.com/yesos-project/yesos-security) | `yesos-security` | invisible bridge firewall between the ONT and the router |
+| [YesOS Desktop](https://github.com/yesos-project/yesos-desktop) | `yesos-desktop` | the core, HD Audio, a desktop of overlapping windows (console, file browser, text viewer), virtio keyboard and tablet; features are added one at a time |
 
 ## 1. What the core provides
 
