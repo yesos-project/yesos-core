@@ -5,7 +5,7 @@ yesmath test (optional core module "math", math/ and include/yesmath.h).
    - each Q16.16 function against exact math on 20 000 inputs: Q16-accurate,
      i.e. within one Q16.16 step (2^-16) or, for larger results, within 2^-20
      of the value; log2 within 2^-23;
-   - gain, mix, biquad (8 channels), symmetric FIR, blur, memcpy and memset
+   - gain, mix, biquad (8 channels), symmetric FIR, blur, memcpy, memset and fill32
      against integer references written here: identical outputs; the
      biquad's SNR and the resampler's SINAD against exact math.
 2. The kernel (`math test` in the core self-test image, QEMU with V): it runs
@@ -218,6 +218,12 @@ def host_kernels(lib):
         got = bytes(dst)
         check(got[off:off + n] == bytes([0xA7]) * n and not any(got[:off]) and not any(got[off + n:]),
               f"memset dst+{off} {n} bytes: exactly those bytes")
+    for off, n in ((0, 1024), (1, 1021), (1, 1), (0, 3), (0, 0)):     # off in 32-bit words
+        dst = (ctypes.c_uint32 * 1028)()
+        lib.ym_fill32(ctypes.byref(dst, 4 * off), ctypes.c_uint32(0x00C0FFEE), ctypes.c_uint64(n))
+        got = list(dst)
+        check(got[off:off + n] == [0x00C0FFEE] * n and not any(got[:off]) and not any(got[off + n:]),
+              f"fill32 dst+{off} words, {n} words: exactly those words")
 
 
 def host_hashes(lib):
@@ -268,7 +274,7 @@ def main():
     vector = {n: h for n, mode, h in lines if mode == "rvv"}
     for name, h in expected:
         check(scalar.get(name) == h, f"{name}: kernel result identical to the host build's")
-    batch = ("normalize3", "dot", "gain", "mix", "biquad8", "fir_sym", "blur3x3", "memcpy", "memset")
+    batch = ("normalize3", "dot", "gain", "mix", "biquad8", "fir_sym", "blur3x3", "memcpy", "memset", "fill32")
     for name in batch:
         check(name in vector and vector[name] == scalar.get(name), f"{name}: vector result identical to the scalar one")
     check(f"[RESULT] yesmath self-check OK: {len(batch)} vector results identical" in out, "the kernel reports OK")

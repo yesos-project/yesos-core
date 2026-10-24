@@ -188,3 +188,10 @@ void ym_memset_scalar(void* dst, int c, ym_u64 n) {
     for (; n >= 8; n -= 8, d += 8) *(ym_u64*)d = w;
     while (n--) *d++ = (ym_u8)c;
 }
+
+void ym_fill32_scalar(ym_u32* dst, ym_u32 v, ym_u64 n) {
+    if (n && ((ym_u64)dst & 4)) { *dst++ = v; n--; }      // to an 8-byte boundary (dst is 4-aligned)
+    ym_u64 w = v | ((ym_u64)v << 32);
+    for (; n >= 2; n -= 2, dst += 2) *(ym_u64*)dst = w;
+    if (n) *dst = v;
+}

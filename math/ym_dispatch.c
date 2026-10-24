@@ -49,3 +49,4 @@ void ym_blur3x3_u8(const ym_u8* src, ym_u8* dst, ym_u32 w, ym_u32 h, ym_u32 stri
 }
 void ym_memcpy(void* d, const void* s, ym_u64 n) { PICK(ym_memcpy_rvv(d, s, n), ym_memcpy_scalar(d, s, n)); }
 void ym_memset(void* d, int c, ym_u64 n) { PICK(ym_memset_rvv(d, c, n), ym_memset_scalar(d, c, n)); }
+void ym_fill32(ym_u32* d, ym_u32 v, ym_u64 n) { PICK(ym_fill32_rvv(d, v, n), ym_fill32_scalar(d, v, n)); }

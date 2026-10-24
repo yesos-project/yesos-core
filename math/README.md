@@ -47,6 +47,7 @@ module adds 45 KiB to the core self-test image.
 | `ym_resample_sinc8` | 8-tap windowed sinc, 256 phases, nearest phase | SINAD 56.5 dB (44.1 → 48 kHz, 5 kHz tone) |
 | `ym_blur3x3_u8` | separable [1 2 1]², 3 rotating row sums | bit-exact to the direct 3×3 sum |
 | `ym_memcpy`, `ym_memset` | words when aligned / RVV e8m8 | exact, nothing written past the end |
+| `ym_fill32` | 32-bit words (pixels): pairs per 64-bit store / RVV e32m8 | exact, nothing written past the end |
 
 **Q16-accurate**: within one Q16.16 step (2^-16) of the exact value, or
 within 2^-20 of it when the value is large; checked on 20 000 inputs per
@@ -88,7 +89,7 @@ contest).
 
 ## What the test checks
 
-`tools/test_math.py` (65 checks):
+`tools/test_math.py` (72 checks):
 
 1. **Host build** (`-DYM_HOST`, ctypes): the accuracy table above, against
    exact math; gain, mix, biquad (outputs and states), FIR, blur, memcpy and

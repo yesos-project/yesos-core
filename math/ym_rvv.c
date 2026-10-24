@@ -107,6 +107,13 @@ void ym_memset_rvv(void* dst, int c, ym_u64 n) {
     }
 }
 
+void ym_fill32_rvv(ym_u32* dst, ym_u32 v, ym_u64 n) {
+    for (size_t vl; n > 0; n -= vl, dst += vl) {
+        vl = __riscv_vsetvl_e32m8(n);
+        __riscv_vse32_v_u32m8(dst, __riscv_vmv_v_x_u32m8(v, vl), vl);
+    }
+}
+
 #if defined(__riscv_zvbb)
 // The scalar normalize lane by lane: HLL log2 with vector clz and indexed
 // loads into the same tables, 2^x likewise, then the three products.

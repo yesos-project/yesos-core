@@ -87,5 +87,6 @@ void ym_blur3x3_u8(const ym_u8* src, ym_u8* dst, ym_u32 w, ym_u32 h, ym_u32 stri
 // ---- memory ----------------------------------------------------------------------------
 void ym_memcpy(void* dst, const void* src, ym_u64 n);
 void ym_memset(void* dst, int c, ym_u64 n);
+void ym_fill32(ym_u32* dst, ym_u32 v, ym_u64 n);   // n 32-bit words (dst 4-byte aligned), e.g. pixels
 
 #endif // YESMATH_H

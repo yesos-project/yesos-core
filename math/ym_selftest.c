@@ -42,7 +42,7 @@ static ym_i16 fir_x[N_FIR + FIR_TAPS - 1], fir_y[N_FIR];
 static ym_i16 rs_x[N_RSX], rs_y[N_RS];
 static ym_u8 img_in[IMG_W * IMG_H], img_out[IMG_W * IMG_H];
 static ym_u16 scratch[3 * IMG_W];
-static ym_u8 mem_src[N_MEM], mem_dst[N_MEM + 16];
+static ym_u8 mem_src[N_MEM], mem_dst[N_MEM + 16] __attribute__((aligned(8)));
 static YmBiquad8 bq;
 
 // 32-tap low-pass (windowed sinc, cut-off 0.2 of the rate, unity gain): first half
@@ -103,6 +103,8 @@ static void batch(YmReport rep, int rvv) {
     RUN("memcpy", rvv, ym_memcpy(mem_dst + 3, mem_src + 5, N_MEM - 7), fnv(mem_dst, sizeof(mem_dst), FNV0));
     for (int i = 0; i < N_MEM + 16; i++) mem_dst[i] = 0;
     RUN("memset", rvv, ym_memset(mem_dst + 1, 0xA7, N_MEM - 3), fnv(mem_dst, sizeof(mem_dst), FNV0));
+    for (int i = 0; i < N_MEM + 16; i++) mem_dst[i] = 0;
+    RUN("fill32", rvv, ym_fill32((ym_u32*)(void*)(mem_dst + 4), 0x00C0FFEEu, N_MEM / 4 - 3), fnv(mem_dst, sizeof(mem_dst), FNV0));
 }
 
 void ym_selftest(YmReport rep) {

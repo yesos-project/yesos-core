@@ -33,6 +33,7 @@ void   ym_fir_sym_q15_scalar(const ym_i16* h, ym_u32 ntaps, const ym_i16* x, ym_
 void   ym_blur3x3_u8_scalar(const ym_u8* src, ym_u8* dst, ym_u32 w, ym_u32 h, ym_u32 stride, ym_u16* scratch);
 void   ym_memcpy_scalar(void* dst, const void* src, ym_u64 n);
 void   ym_memset_scalar(void* dst, int c, ym_u64 n);
+void   ym_fill32_scalar(ym_u32* dst, ym_u32 v, ym_u64 n);
 
 // Vector versions (ym_rvv.c, only when built for RISC-V with V).
 void   ym_normalize3_batch_rvv(const ym_i32* x, const ym_i32* y, const ym_i32* z, ym_i32* ox, ym_i32* oy, ym_i32* oz, ym_u64 n);
@@ -44,6 +45,7 @@ void   ym_fir_sym_q15_rvv(const ym_i16* h, ym_u32 ntaps, const ym_i16* x, ym_i16
 void   ym_blur3x3_u8_rvv(const ym_u8* src, ym_u8* dst, ym_u32 w, ym_u32 h, ym_u32 stride, ym_u16* scratch);
 void   ym_memcpy_rvv(void* dst, const void* src, ym_u64 n);
 void   ym_memset_rvv(void* dst, int c, ym_u64 n);
+void   ym_fill32_rvv(ym_u32* dst, ym_u32 v, ym_u64 n);
 
 static inline ym_i16 ym_sat16(ym_i64 v) { return v > 32767 ? 32767 : v < -32768 ? -32768 : (ym_i16)v; }
 
