@@ -6,7 +6,9 @@ ChaCha20 test (optional core module "chacha", kernel/chacha20*.c).
    - 3 000 random keys, nonces, counters, lengths (0-2 000 bytes) and data
      offsets 0-7 against the `cryptography` package (OpenSSL's ChaCha20);
    - across the 32-bit counter's wrap: block by block equal to counters
-     0xFFFFFFFD, ..., 0xFFFFFFFF, 0, 1, ... with the same nonce.
+     0xFFFFFFFD, ..., 0xFFFFFFFF, 0, 1, ... with the same nonce;
+   - Poly1305: RFC 8439 2.5.2, 3 000 random and edge cases against OpenSSL,
+     and 1 000 whole ChaCha20-Poly1305 seals (ciphertext and tag).
 2. The kernel (`chacha test` in the core self-test image, QEMU with V): the
    self-check (kernel/chacha20_selftest.c) hashes must equal the host build's
    of the same file, for the scalar and for the vector version.
@@ -22,6 +24,8 @@ import sys
 import tempfile
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms
+from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
+from cryptography.hazmat.primitives.poly1305 import Poly1305
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CORE = os.path.dirname(HERE)
@@ -40,7 +44,7 @@ def check(cond, label):
 def host_lib(d):
     so = os.path.join(d, "cc20.so")
     subprocess.run(["cc", "-O2", "-Wall", "-DCC20_HOST", "-shared", "-fPIC", "-I", os.path.join(CORE, "include"),
-                    *(os.path.join(CORE, "kernel", f) for f in ("chacha20.c", "chacha20_selftest.c")), "-o", so],
+                    *(os.path.join(CORE, "kernel", f) for f in ("chacha20.c", "poly1305.c", "chacha20_selftest.c")), "-o", so],
                    check=True)
     lib = ctypes.CDLL(so)
     lib.cc20_xor.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_uint64]
@@ -92,6 +96,39 @@ def host(lib):
              for j in range(8))
     check(ok, "across the counter's wrap: blocks for 0xFFFFFFFD..0xFFFFFFFF, then 0..4, same nonce")
 
+    # Poly1305: RFC 8439 2.5.2, then random keys and messages against OpenSSL
+    lib.cc20_poly1305.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint64, ctypes.c_char_p]
+    lib.cc20_poly1305_aead.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint64, ctypes.c_char_p,
+                                       ctypes.c_uint64, ctypes.c_char_p]
+
+    def poly(key, msg):
+        t = ctypes.create_string_buffer(16)
+        lib.cc20_poly1305(key, msg, len(msg), t)
+        return t.raw
+
+    k = bytes.fromhex("85d6be7857556d337f4452fe42d506a80103808afb0db2fd4abff6af4149f51b")
+    check(poly(k, b"Cryptographic Forum Research Group") == bytes.fromhex("a8061dc1305136c6c22b8baf0c0127a9"),
+          "Poly1305: RFC 8439 2.5.2 tag a8061dc1305136c6c22b8baf0c0127a9")
+    special = [bytes(32), b"\xff" * 32, bytes(16) + b"\xff" * 16, b"\xff" * 16 + bytes(16)]
+    bad = []
+    for i in range(3000):
+        key = special[i] if i < len(special) else rng.randbytes(32)
+        msg = (b"\xff" * rng.choice([16, 17, 32, 64, 1000])) if i % 7 == 0 else rng.randbytes(rng.randrange(0, 1200))
+        if poly(key, msg) != Poly1305.generate_tag(key, msg):
+            bad.append(len(msg))
+    check(not bad, f"Poly1305: 3000 random and edge keys/messages (all-ones blocks too) equal to OpenSSL{'' if not bad else bad[:3]}")
+    bad = []
+    for i in range(1000):
+        key, nonce = rng.randbytes(32), rng.randbytes(12)
+        aad, pt = rng.randbytes(rng.randrange(0, 40)), rng.randbytes(rng.randrange(0, 1500))
+        ct = ours(lib, key, nonce, 1, pt)
+        otk = ours(lib, key, nonce, 0, bytes(32))
+        t = ctypes.create_string_buffer(16)
+        lib.cc20_poly1305_aead(otk, aad, len(aad), ct, len(ct), t)
+        if ct + t.raw != ChaCha20Poly1305(key).encrypt(nonce, pt, aad):
+            bad.append((len(aad), len(pt)))
+    check(not bad, f"ChaCha20-Poly1305: 1000 random AEAD seals (ciphertext and tag) equal to OpenSSL{'' if not bad else bad[:3]}")
+
     got = []
     cb_t = ctypes.CFUNCTYPE(None, ctypes.c_char_p, ctypes.c_uint64, ctypes.c_uint64)
     cb = cb_t(lambda what, n, h: got.append((what.decode(), n, h)))
@@ -116,7 +153,7 @@ def kernel():
     finally:
         vm.stop()
         shutil.rmtree(tmp, ignore_errors=True)
-    return re.findall(r"^\s+(len|wrap) (\d+) (scalar|rvv)\s+([0-9A-Fa-f]{16})", out, re.M), out
+    return re.findall(r"^\s+(len|wrap|poly) (\d+) (scalar|rvv)\s+([0-9A-Fa-f]{16})", out, re.M), out
 
 
 def main():

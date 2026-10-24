@@ -65,7 +65,7 @@ CORE_lineedit_SRCS =                                                        # co
 CORE_vault_SRCS    = $(CORE)/kernel/vault.c $(CORE)/kernel/vault_shell.c   # encrypted /vault, key in the key hart
 CORE_packages_SRCS = $(CORE)/kernel/app_registry.c $(CORE)/kernel/ypkg.c   # .ypk apps run in PMP cells
 CORE_dns_SRCS      = $(CORE)/kernel/dnsblock.c                              # DNS filter (engine in Rust)
-CORE_chacha_SRCS   = $(addprefix $(CORE)/kernel/, chacha20.c chacha20_rvv.c chacha20_selftest.c \
+CORE_chacha_SRCS   = $(addprefix $(CORE)/kernel/, chacha20.c chacha20_rvv.c poly1305.c chacha20_selftest.c \
                      chacha20_shell.c)   # ChaCha20 keystream, scalar + RVV
 CORE_math_SRCS     = $(addprefix $(CORE)/math/, ym_math.c ym_rvv.c ym_dispatch.c ym_tables.c \
                      ym_selftest.c ym_shell.c)                              # yesmath (tables 36 KiB)

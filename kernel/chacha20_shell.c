@@ -17,7 +17,7 @@ static U64 g_scalar[MAX_LINES];
 static U32 g_line, g_pass, g_mismatch;
 
 static U0 report(const char* what, U64 len, U64 hash) {
-    kprintf("  %s %u %s %016x", what, len, g_pass ? "rvv   " : "scalar", hash);
+    kprintf("  %s %u %s %016x", what, len, g_pass ? "rvv   " : "scalar", hash);   // poly: scalar in both passes
     if (g_line < MAX_LINES) {
         if (!g_pass) g_scalar[g_line] = hash;
         else if (g_scalar[g_line] != hash) g_mismatch++;
