@@ -9,73 +9,7 @@ static U64 g_heap_limit = 0;
 static BlockHeader* g_first_block = NULL;
 static MemStats g_stats = {0};
 
-// Memory Primitives
-void* MemSet(void* dest, I32 val, size_t count) {
-    if (!dest || count == 0) return dest;
-    U8 v = (U8)val;
-    U64 qval = (U64)v;
-    qval |= (qval << 8);
-    qval |= (qval << 16);
-    qval |= (qval << 32);
-
-    U64* d64 = (U64*)dest;
-    size_t qcount = count >> 3;
-    size_t remainder = count & 7;
-
-    while (qcount--) {
-        *d64++ = qval;
-    }
-
-    U8* d8 = (U8*)d64;
-    while (remainder--) {
-        *d8++ = v;
-    }
-    return dest;
-}
-
-void* MemCpy(void* dest, const void* src, size_t count) {
-    if (!dest || !src || count == 0) return dest;
-
-    const U64* s64 = (const U64*)src;
-    U64* d64 = (U64*)dest;
-    size_t qcount = count >> 3;
-    size_t remainder = count & 7;
-
-    while (qcount--) {
-        *d64++ = *s64++;
-    }
-
-    const U8* s8 = (const U8*)s64;
-    U8* d8 = (U8*)d64;
-    while (remainder--) {
-        *d8++ = *s8++;
-    }
-    return dest;
-}
-
-void* memcpy(void* dest, const void* src, size_t count) {
-    return MemCpy(dest, src, count);
-}
-
-void* memset(void* dest, int val, size_t count) {
-    return MemSet(dest, val, count);
-}
-
-void* memmove(void* dest, const void* src, size_t count) {
-    if (!dest || !src || count == 0) return dest;
-    U8* d = (U8*)dest;
-    const U8* s = (const U8*)src;
-    if (d < s) {
-        return MemCpy(dest, src, count);
-    } else if (d > s) {
-        d += count;
-        s += count;
-        while (count--) {
-            *--d = *--s;
-        }
-    }
-    return dest;
-}
+// MemSet, MemCpy, memset, memcpy, memmove: kernel/memops.c
 
 I32 MemCmp(const void* s1, const void* s2, size_t count) {
     const U8* p1 = (const U8*)s1;
