@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-No unaligned accesses: the memory primitives (kernel/memops.c) and LZ4
-(kernel/lz4.c), built on the host with UBSan's alignment check in trap mode,
+No unaligned accesses: the memory primitives (kernel/memops.c), LZ4
+(kernel/lz4.c) and the Internet checksum (kernel/net_csum.c), built on the host with UBSan's alignment check in trap mode,
 so any unaligned access stops the process with SIGILL (on RISC-V such an
 access may trap, and the kernel has no handler for it). First a probe proves
 that the check is live; then every combination of destination and source
 offset 0-15 with lengths around the word size and larger, overlapping moves
 in both directions and fills, all compared with Python with guard bytes
 around; and LZ4 round trips of random, repetitive and mixed data at source
-and destination offsets 0-7. Non-zero exit status on failure.
+and destination offsets 0-7; the checksum at offsets 0-15 and lengths
+0-300 and 1500, against RFC 1071 in Python. Non-zero exit status on failure.
 """
 import ctypes
 import os
@@ -36,7 +37,7 @@ def check(cond, label):
 def build(d):
     so = os.path.join(d, "memops.so")
     subprocess.run(["clang", *FLAGS, os.path.join(CORE, "kernel", "memops.c"), os.path.join(CORE, "kernel", "lz4.c"),
-                    "-o", so], check=True)
+                    os.path.join(CORE, "kernel", "net_csum.c"), "-o", so], check=True)
     probe_c, probe_so = os.path.join(d, "probe.c"), os.path.join(d, "probe.so")
     open(probe_c, "w").write(PROBE)
     subprocess.run(["clang", *FLAGS, probe_c, "-o", probe_so], check=True)
@@ -124,6 +125,37 @@ def child_lz4(so):
     print("LZ4", runs, len(bad), bad[:3], " ".join(f"{k}={v:.2f}" for k, v in ratio.items()))
 
 
+def rfc1071(data, start=0):
+    s = start
+    for i in range(0, len(data) - 1, 2):
+        s += (data[i] << 8) | data[i + 1]
+    if len(data) & 1:
+        s += data[-1] << 8
+    while s >> 16:
+        s = (s & 0xFFFF) + (s >> 16)
+    return ~s & 0xFFFF
+
+
+def child_csum(so):
+    lib = ctypes.CDLL(so)
+    lib.net_csum_add.restype = ctypes.c_uint32
+    lib.net_csum_add.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_uint32]
+    lib.net_csum_fold.restype = ctypes.c_uint16
+    lib.net_csum_fold.argtypes = [ctypes.c_uint32]
+    rng = random.Random(1071)
+    runs, bad = 0, []
+    for off in range(16):
+        for n in list(range(0, 301)) + [1460, 1500]:
+            data = bytes(rng.randrange(256) for _ in range(n)) if n % 5 else b"\xff" * n   # all-ones: carries
+            buf = (ctypes.c_uint8 * (n + 16)).from_buffer_copy(bytes(off) + data + bytes(16 - off))
+            start = rng.randrange(0, 0x40000)                 # e.g. a pseudo-header's sum
+            got = lib.net_csum_fold(lib.net_csum_add(ctypes.byref(buf, off), n, start))
+            runs += 1
+            if got != rfc1071(data, start):
+                bad.append(f"off {off} n {n}")
+    print("CSUM", runs, len(bad), bad[:3])
+
+
 def run_child(mode, path):
     r = subprocess.run([sys.executable, __file__, mode, path], capture_output=True, text=True)
     return r.returncode, r.stdout
@@ -131,7 +163,7 @@ def run_child(mode, path):
 
 def main():
     if len(sys.argv) == 3:                                # child process
-        {"--probe": child_probe, "--cases": child_cases, "--lz4": child_lz4}[sys.argv[1]](sys.argv[2])
+        {"--probe": child_probe, "--cases": child_cases, "--lz4": child_lz4, "--csum": child_csum}[sys.argv[1]](sys.argv[2])
         return
     d = tempfile.mkdtemp(prefix="yesos_memops_")
     so, probe_so = build(d)
@@ -149,6 +181,11 @@ def main():
     check(rc == 0 and line.startswith("LZ4 256 0 "),
           f"LZ4: 256 round trips at source/destination offsets 0-7, identical, no unaligned access "
           f"(exit {rc}; compressed/original {line.split(']')[-1].strip() if line else '?'})")
+    rc, out = run_child("--csum", so)
+    line = next((l for l in out.splitlines() if l.startswith("CSUM")), "")
+    check(rc == 0 and line.startswith("CSUM 4848 0 "),
+          f"Internet checksum: 4848 cases (offsets 0-15, lengths 0-300, 1460, 1500) equal to RFC 1071, "
+          f"no unaligned access (exit {rc}{'' if line.startswith('CSUM 4848 0 ') else '; ' + line})")
     print()
     if failures:
         print(f"{len(failures)} check(s) FAILED")

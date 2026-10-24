@@ -50,7 +50,7 @@ CORE_ASM_SRCS = $(addprefix $(CORE)/, boot/boot_rv64.S kernel/trap_rv64.S kernel
                 kernel/cell_rt.S kernel/keyhart_vkey.S)
 
 CORE_C_SRCS = $(addprefix $(CORE)/, \
-         kernel/main.c kernel/kprintf.c kernel/memory.c kernel/memops.c kernel/pmp.c kernel/smp.c \
+         kernel/main.c kernel/kprintf.c kernel/memory.c kernel/memops.c kernel/net_csum.c kernel/pmp.c kernel/smp.c \
          kernel/trap.c kernel/task.c kernel/lz4.c kernel/barrett_poly.c \
          kernel/ramfs.c kernel/redsea_eml.c kernel/vfs.c \
          kernel/holyq_jit.c kernel/holyq_rv64_emit.c kernel/holyq_rv64_compiler.c \

@@ -234,6 +234,12 @@ VirtIONetStats* virtio_net_get_stats(U0);
 
 // Raw Frame Transmission & Polling
 Bool virtio_net_send_raw(const void* frame, size_t len);
+// Internet checksum (RFC 1071, kernel/net_csum.c): net_csum_add adds len
+// bytes as big-endian 16-bit words to a running 32-bit sum (start with 0 or a
+// pseudo-header's sum); net_csum_fold folds it and returns the checksum, a
+// value in host order to store big-endian.
+U32  net_csum_add(const void* data, size_t len, U32 sum);
+U16  net_csum_fold(U32 sum);
 U0   virtio_net_poll(U0);
 
 // Protocol Utilities & Services

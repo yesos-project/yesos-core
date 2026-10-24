@@ -157,19 +157,10 @@ static inline uint32_t htonl(uint32_t x) {
 }
 static inline __attribute__((unused)) uint32_t ntohl(uint32_t x) { return htonl(x); }
 
+// The checksum as stored in a header field (network byte order). The old
+// byte-pair loop here ran `i < len - 1`, which wraps for len 0.
 static uint16_t net_calc_checksum(const void* data, size_t len) {
-    const uint8_t* bytes = (const uint8_t*)data;
-    uint32_t sum = 0;
-    for (size_t i = 0; i < len - 1; i += 2) {
-        sum += ((uint16_t)bytes[i] << 8) | bytes[i + 1];
-    }
-    if (len & 1) {
-        sum += ((uint16_t)bytes[len - 1] << 8);
-    }
-    while (sum >> 16) {
-        sum = (sum & 0xFFFF) + (sum >> 16);
-    }
-    return htons((uint16_t)~sum);
+    return htons(net_csum_fold(net_csum_add(data, len, 0)));
 }
 
 // ----------------------------------------------------------------------------
