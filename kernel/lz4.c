@@ -4,11 +4,28 @@
 #include "timer.h"
 #include "riscv_bitmanip.h"
 
+// Loads and stores at any byte position, without unaligned accesses (a
+// RISC-V core may trap on one and M-mode has no handler): direct when the
+// address is aligned, else assembled from bytes (little-endian).
+typedef U16 __attribute__((may_alias)) A16;
+typedef U32 __attribute__((may_alias)) A32;
+typedef U64 __attribute__((may_alias)) A64;
+static inline U16 ld16(const U8* p) { return ((U64)p & 1) ? (U16)(p[0] | (p[1] << 8)) : *(const A16*)p; }
+static inline U32 ld32(const U8* p) {
+    if (((U64)p & 3) == 0) return *(const A32*)p;
+    return (U32)p[0] | ((U32)p[1] << 8) | ((U32)p[2] << 16) | ((U32)p[3] << 24);
+}
+static inline U64 ld64(const U8* p) {
+    if (((U64)p & 7) == 0) return *(const A64*)p;
+    return (U64)ld32(p) | ((U64)ld32(p + 4) << 32);
+}
+static inline U0 st16(U8* p, U16 v) { p[0] = (U8)v; p[1] = (U8)(v >> 8); }
+
 #define LZ4_MIN_MATCH 4
 #define LZ4_HASH_MULT 2654435761U // Golden Ratio 32-bit Hash Multiplier
 
 static inline U32 lz4_hash4(const U8* p) {
-    U32 v = *(const U32*)p;
+    U32 v = ld32(p);
     return (v * LZ4_HASH_MULT) >> (32 - LZ4_MEMORY_USAGE);
 }
 
@@ -47,7 +64,7 @@ I64 lz4_compress(const U8* src, I64 src_size, U8* dst, I64 dst_capacity) {
         match = s_lz4_hash_table[h];
         s_lz4_hash_table[h] = ip;
 
-        if ((match >= src) && (match < ip) && (ip - match < 65536) && (*(const U32*)match == *(const U32*)ip)) {
+        if ((match >= src) && (match < ip) && (ip - match < 65536) && (ld32(match) == ld32(ip))) {
             // Match found! Encode literals
             I64 lit_len = ip - anchor;
             U8* token = op++;
@@ -72,7 +89,7 @@ I64 lz4_compress(const U8* src, I64 src_size, U8* dst, I64 dst_capacity) {
 
             // Encode match offset (16-bit little endian)
             U16 offset = (U16)(ip - match);
-            *(U16*)op = offset;
+            st16(op, offset);
             op += 2;
 
             // Encode match length
@@ -80,7 +97,7 @@ I64 lz4_compress(const U8* src, I64 src_size, U8* dst, I64 dst_capacity) {
             match += 4;
             const U8* match_start = ip;
             while (ip < (iend - 8)) {
-                U64 diff = *(const U64*)ip ^ *(const U64*)match;
+                U64 diff = ld64(ip) ^ ld64(match);
                 if (diff == 0) {
                     ip += 8;
                     match += 8;
@@ -174,7 +191,7 @@ I64 lz4_decompress(const U8* src, I64 src_size, U8* dst, I64 dst_capacity) {
 
         // 2. Match offset (16-bit)
         if (ip + 2 > iend) return 0;
-        U16 offset = *(const U16*)ip;
+        U16 offset = ld16(ip);
         ip += 2;
 
         if (offset == 0) return 0;

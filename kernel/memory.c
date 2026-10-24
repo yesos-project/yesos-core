@@ -180,8 +180,10 @@ void* Malloc(size_t size) {
             g_stats.num_allocations++;
 
             U8* payload = (U8*)curr + sizeof(BlockHeader);
-            // Write Tail Canary directly after requested payload bytes
-            *(U64*)(payload + orig_requested_size) = HEAP_CANARY_TAIL;
+            // Tail canary right after the requested bytes: often not 8-byte
+            // aligned, so copied bytewise (no unaligned access)
+            U64 canary = HEAP_CANARY_TAIL;
+            MemCpy(payload + orig_requested_size, &canary, sizeof(canary));
 
             return (void*)payload;
         }
@@ -237,7 +239,8 @@ U0 Free(void* ptr) {
 
     // 4. Heap Buffer Overflow / Tail Canary Validation
     if (block->requested_size > 0 && block->requested_size + sizeof(U64) <= block->size) {
-        U64 canary = *(U64*)((U8*)ptr + block->requested_size);
+        U64 canary;
+        MemCpy(&canary, (U8*)ptr + block->requested_size, sizeof(canary));   // may be unaligned
         if (canary != HEAP_CANARY_TAIL) {
             kprintf("[MEM] HARDENING ALERT: Buffer Overflow detected! Canary smashed on block 0x%p (Expected: 0x%p, Found: 0x%p)!\n",
                     ptr, (void*)HEAP_CANARY_TAIL, (void*)canary);
@@ -292,7 +295,8 @@ Bool mem_verify_heap_integrity(U0) {
         }
         if (!curr->is_free && curr->requested_size > 0 && curr->requested_size + sizeof(U64) <= curr->size) {
             U8* payload = (U8*)curr + sizeof(BlockHeader);
-            U64 canary = *(U64*)(payload + curr->requested_size);
+            U64 canary;
+            MemCpy(&canary, payload + curr->requested_size, sizeof(canary));   // may be unaligned
             if (canary != HEAP_CANARY_TAIL) {
                 kprintf("[MEM] Heap integrity failure: Block %u canary smashed at 0x%p\n", (U32)count, curr);
                 return FALSE;

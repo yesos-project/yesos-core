@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-Memory primitives test (kernel/memops.c), on the host: MemCpy, memmove and
-MemSet built with UBSan's alignment check in trap mode, so any unaligned
-access stops the process with SIGILL (on RISC-V such an access may trap, and
-the kernel has no handler for it). First a probe proves that the check is
-live; then every combination of destination and source offset 0-15 with
-lengths around the word size and larger, overlapping moves in both
-directions, and fills, all compared with Python and with guard bytes
-around. Non-zero exit status on failure.
+No unaligned accesses: the memory primitives (kernel/memops.c) and LZ4
+(kernel/lz4.c), built on the host with UBSan's alignment check in trap mode,
+so any unaligned access stops the process with SIGILL (on RISC-V such an
+access may trap, and the kernel has no handler for it). First a probe proves
+that the check is live; then every combination of destination and source
+offset 0-15 with lengths around the word size and larger, overlapping moves
+in both directions and fills, all compared with Python with guard bytes
+around; and LZ4 round trips of random, repetitive and mixed data at source
+and destination offsets 0-7. Non-zero exit status on failure.
 """
 import ctypes
 import os
@@ -34,7 +35,8 @@ def check(cond, label):
 
 def build(d):
     so = os.path.join(d, "memops.so")
-    subprocess.run(["clang", *FLAGS, os.path.join(CORE, "kernel", "memops.c"), "-o", so], check=True)
+    subprocess.run(["clang", *FLAGS, os.path.join(CORE, "kernel", "memops.c"), os.path.join(CORE, "kernel", "lz4.c"),
+                    "-o", so], check=True)
     probe_c, probe_so = os.path.join(d, "probe.c"), os.path.join(d, "probe.so")
     open(probe_c, "w").write(PROBE)
     subprocess.run(["clang", *FLAGS, probe_c, "-o", probe_so], check=True)
@@ -94,6 +96,34 @@ def child_cases(so):
     print("MEMSET", runs, len(bad), bad[:3])
 
 
+def child_lz4(so):
+    lib = ctypes.CDLL(so)
+    for f in ("lz4_compress", "lz4_decompress", "lz4_compress_bound"):
+        getattr(lib, f).restype = ctypes.c_int64
+    rng = random.Random(9)
+    text = b"YesOS NAS: RedSea volume, WebDAV share, snapshot of /share/docs. " * 200
+    datasets = {"random": bytes(rng.randrange(256) for _ in range(5000)), "text": text[:12000],
+                "zeros": bytes(7000), "mixed": text[:3000] + bytes(rng.randrange(256) for _ in range(2000)) + text[:4000]}
+    runs, bad, ratio = 0, [], {}
+    for name, data in datasets.items():
+        for soff in range(8):
+            for doff in range(8):
+                n = len(data) - soff - doff
+                d = data[:n]
+                src = (ctypes.c_uint8 * (n + 16)).from_buffer_copy(bytes(soff) + d + bytes(16 - soff))
+                cap = lib.lz4_compress_bound(ctypes.c_int64(n))
+                comp = (ctypes.c_uint8 * (cap + 16))()
+                c = lib.lz4_compress(ctypes.byref(src, soff), ctypes.c_int64(n), ctypes.byref(comp, doff), ctypes.c_int64(cap))
+                comp2 = (ctypes.c_uint8 * (c + 16)).from_buffer_copy(bytes(soff) + bytes(comp)[doff:doff + c] + bytes(16 - soff))
+                out = (ctypes.c_uint8 * (n + 16))()
+                m = lib.lz4_decompress(ctypes.byref(comp2, soff), ctypes.c_int64(c), ctypes.byref(out, doff), ctypes.c_int64(n))
+                runs += 1
+                ratio[name] = c / n
+                if c <= 0 or m != n or bytes(out)[doff:doff + n] != d:
+                    bad.append(f"{name} src+{soff} dst+{doff}: compressed {c}, decompressed {m}")
+    print("LZ4", runs, len(bad), bad[:3], " ".join(f"{k}={v:.2f}" for k, v in ratio.items()))
+
+
 def run_child(mode, path):
     r = subprocess.run([sys.executable, __file__, mode, path], capture_output=True, text=True)
     return r.returncode, r.stdout
@@ -101,7 +131,7 @@ def run_child(mode, path):
 
 def main():
     if len(sys.argv) == 3:                                # child process
-        (child_probe if sys.argv[1] == "--probe" else child_cases)(sys.argv[2])
+        {"--probe": child_probe, "--cases": child_cases, "--lz4": child_lz4}[sys.argv[1]](sys.argv[2])
         return
     d = tempfile.mkdtemp(prefix="yesos_memops_")
     so, probe_so = build(d)
@@ -114,6 +144,11 @@ def main():
         line = next((l for l in out.splitlines() if l.startswith(name)), "")
         ok = line.startswith(f"{name} {count} 0 ")
         check(ok, f"{name.capitalize()}: {count} cases identical to Python, guard bytes untouched" + ("" if ok else f" ({line})"))
+    rc, out = run_child("--lz4", so)
+    line = next((l for l in out.splitlines() if l.startswith("LZ4")), "")
+    check(rc == 0 and line.startswith("LZ4 256 0 "),
+          f"LZ4: 256 round trips at source/destination offsets 0-7, identical, no unaligned access "
+          f"(exit {rc}; compressed/original {line.split(']')[-1].strip() if line else '?'})")
     print()
     if failures:
         print(f"{len(failures)} check(s) FAILED")
