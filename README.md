@@ -86,10 +86,10 @@ YesOS runs on an Orange Pi RV2.
 
 | | |
 |---|---|
-| Image code size (`.text`) | core self-test 384 KiB (all modules; `math` adds 45), Desktop 338 KiB, Security 355 KiB, NAS 752 KiB |
+| Image code size (`.text`) | core self-test 388 KiB (all modules; `math` adds 45), Desktop 338 KiB, Security 355 KiB, NAS 756 KiB |
 | PMP entries used (kernel hart) | 9 of 16 |
 | Floating-point instructions in the image | 0 (`tools/check_no_fp.py`) |
-| Test suites | core 11, NAS 9, Security 1 (64 checks), Desktop 7 (18 + 48 + 23 + 35 + 37 + 30 + 24 checks), all run under QEMU |
+| Test suites | core 12, NAS 9, Security 1 (64 checks), Desktop 7 (18 + 48 + 23 + 35 + 37 + 30 + 24 checks), all run under QEMU |
 
 ### Experimental work in `yesos-lab`
 
@@ -152,6 +152,7 @@ include core/core.mk                # yesos.elf: compile, link, prove
 | `gfx` | the 8x16 font and the cells' text call (refused without it) | Desktop |
 | `lineedit` | console line editing and history (without it: type and backspace only) | Desktop |
 | `math` | yesmath: integer math (log/exp/sqrt, sin, atan2), audio DSP, blur, memcpy; scalar and RVV versions with identical results; `math` command ([`math/README.md`](math/README.md)) | Desktop |
+| `chacha` | ChaCha20 keystream (RFC 8439), scalar and RVV (up to 8 blocks per pass, one per vector lane; vector registers cleared afterwards); `chacha` command; `tools/test_chacha.py` checks it against the RFC, OpenSSL and the kernel | NAS (its TLS) |
 
 A product gets only what it names, and less code is less attack surface:
 NAS and Security have no font, no line editor and none of the Desktop's
@@ -179,7 +180,7 @@ its services into the core without the core knowing them:
 layout cannot be proven, the key hart can reach a vector instruction outside
 `keyhart_vkey.S`, the trap path can reach one (other than the `vsetvl` that
 restores vtype and vl), or it contains a floating-point instruction or a forbidden
-symbol. Measured code size (`.text`): NAS 752 KiB, Security 355 KiB,
+symbol. Measured code size (`.text`): NAS 756 KiB, Security 355 KiB,
 Desktop 338 KiB.
 
 In this repository, `make` builds the core self-test image (core + vault +
@@ -193,7 +194,7 @@ sudo apt install -y git make clang lld llvm qemu-system-misc python3 python3-ven
 rustup target add riscv64gc-unknown-none-elf
 make prover-setup        # once: Z3 in tools/.venv
 make                     # yesos.elf: links, proves the PMP layout, checks the key hart, hashes the image
-make test                # test_pmp, test_cells, test_integrity, test_packages, test_dns, test_timer, test_pci, test_line_edit, test_checksum, test_math, test_memops
+make test                # test_pmp, test_cells, test_integrity, test_packages, test_dns, test_timer, test_pci, test_line_edit, test_checksum, test_math, test_memops, test_chacha
 make run                 # serial console in the terminal (Ctrl-A X to quit)
 ```
 
@@ -385,7 +386,7 @@ Network     net  ping [ip]  net bench  net ip <a.b.c.d/nn> [gw <ip>] | default  
 Isolation   pmp  pmp test  cell  cell test  cell run <f.HQ> [n]  keyhart test  integrity
 HolyQ       run <f.HQ>  jit <code>  jit bench|rvv|disasm <fn>   (console: full privileges)
 System      sysinfo  mem  hardening  smp  uptime  tasks  ata  pci  clear  reboot  poweroff
-Modules     vault [status|init|unlock|lock|passwd]   pkg [list|install|run|remove]   math [test|use scalar|use vector]
+Modules     vault [status|init|unlock|lock|passwd]   pkg [list|install|run|remove]   math [test|use scalar|use vector]   chacha [test]
             dns [status|log|on|off|flush|test <d>|allow|block|unallow|unblock <d>|upstream <ip>...|auto|doh|list add|on|off|delete]
 ```
 
