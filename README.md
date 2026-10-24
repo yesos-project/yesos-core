@@ -36,7 +36,7 @@ selects only the parts it needs, so each image contains nothing else:
 
 | Area | Files |
 | :--- | :--- |
-| Boot, traps, memory, SMP | `boot/boot_rv64.S`, `kernel/trap*.{c,S}`, `kernel/memory.c`, `kernel/memops.c` (copies and fills without unaligned accesses: a RISC-V core may trap on one and M-mode has no handler; `tools/test_memops.py` checks them and LZ4 under UBSan's alignment trap), `kernel/smp.c`, `kernel/task*.{c,S}` |
+| Boot, traps, memory, SMP | `boot/boot_rv64.S`, `kernel/trap*.{c,S}`, `kernel/memory.c`, `kernel/memops.c` (copies and fills without unaligned accesses: a RISC-V core may trap on one and M-mode has no handler), `kernel/net_csum.c` (the Internet checksum summed in aligned 64-bit words); `tools/test_memops.py` checks them and LZ4 under UBSan's alignment trap, `kernel/smp.c`, `kernel/task*.{c,S}` |
 | PMP and Z3 prover | `kernel/pmp.c`, `tools/pmp_prover.py` (+ `make prover-setup`) |
 | Cells | `kernel/cell.c`, `kernel/cell_rt.S` |
 | Key hart and integrity | `kernel/keyhart.c`, `kernel/keyhart_vkey.S`, `tools/check_keyhart_vector.py`, `tools/image_hash.py` |
@@ -86,7 +86,7 @@ YesOS runs on an Orange Pi RV2.
 
 | | |
 |---|---|
-| Image code size (`.text`) | core self-test 392 KiB (all modules; `math` adds 45), Desktop 338 KiB, Security 355 KiB, NAS 756 KiB |
+| Image code size (`.text`) | core self-test 392 KiB (all modules; `math` adds 45), Desktop 338 KiB, Security 355 KiB, NAS 760 KiB |
 | PMP entries used (kernel hart) | 9 of 16 |
 | Floating-point instructions in the image | 0 (`tools/check_no_fp.py`) |
 | Test suites | core 12, NAS 9, Security 1 (64 checks), Desktop 7 (18 + 48 + 23 + 35 + 37 + 30 + 24 checks), all run under QEMU |
@@ -180,7 +180,7 @@ its services into the core without the core knowing them:
 layout cannot be proven, the key hart can reach a vector instruction outside
 `keyhart_vkey.S`, the trap path can reach one (other than the `vsetvl` that
 restores vtype and vl), or it contains a floating-point instruction or a forbidden
-symbol. Measured code size (`.text`): NAS 756 KiB, Security 355 KiB,
+symbol. Measured code size (`.text`): NAS 760 KiB, Security 355 KiB,
 Desktop 338 KiB.
 
 In this repository, `make` builds the core self-test image (core + vault +
