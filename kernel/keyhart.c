@@ -42,7 +42,7 @@ static const U8 g_kh_zero64[64] __attribute__((aligned(8)));   // vle64 needs 8-
 // --- Integrity monitor ------------------------------------------------------
 #define INTEG_CHUNK       (64 * 1024)
 #define INTEG_MAX_CHUNKS  128
-#define INTEG_INTERVAL    20000          // time ticks between chunk checks (2 ms at 10 MHz)
+#define INTEG_PASS_TICKS  15000000ULL    // one full pass over the image every 1.5 s (10 MHz timebase)
 
 extern U8 _kernel_start[], _text_end[], _rodata_start[], _rodata_sec_end[], _rodata_end[];
 static const volatile U64 g_integ_sym[5] = {   // absolute: see pmp.c
@@ -250,12 +250,15 @@ static KeyhartStatus kh_integrity_arm(U0) {
     return KH_OK;
 }
 
-// One chunk per call, paced by the timebase so requests are never starved.
-// A change locks the vault immediately: the code that guards it is suspect.
+// One chunk per call, paced by the timebase so that a full pass takes
+// INTEG_PASS_TICKS whatever the image size (it used to be one chunk every
+// 2 ms: a pass every 14-24 ms, keeping the key hart hashing nearly all the
+// time). A change locks the vault immediately: the code that guards it is
+// suspect.
 static U0 kh_integrity_step(U0) {
     if (!g_integ.armed) return;
     U64 now = kh_time();
-    if (now - g_kv_last_check < INTEG_INTERVAL) return;
+    if (now - g_kv_last_check < INTEG_PASS_TICKS / g_integ.chunks) return;
     g_kv_last_check = now;
     U32 i = g_kv_next_chunk;
     U8 tag[32];
