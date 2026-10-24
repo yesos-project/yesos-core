@@ -15,7 +15,7 @@ Bool        shell_secret_prompt_active(U0);
 const char* shell_secret_prompt_label(U0);
 
 // Product commands: run() returns TRUE when it handled the line; help()
-// prints the product's section of `help`. Up to 8 extensions.
+// prints the product's section of `help`. Up to 12 extensions.
 // Optional: capture() takes the next submitted line while the extension has
 // a hidden prompt pending (returns TRUE if it did); prompt() returns that
 // prompt's label, or NULL when none is pending (input is then echoed).

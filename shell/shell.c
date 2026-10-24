@@ -31,7 +31,7 @@
 
 #define CMD_BUFFER_SIZE 256
 
-#define SHELL_MAX_EXTENSIONS 8
+#define SHELL_MAX_EXTENSIONS 12
 static const ShellExtension* g_ext[SHELL_MAX_EXTENSIONS];
 static U32 g_ext_count = 0;
 
