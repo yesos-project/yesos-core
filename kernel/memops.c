@@ -25,24 +25,39 @@ void* MemSet(void* dest, I32 val, size_t count) {
 }
 
 // Forward copy of n bytes, d below s or not overlapping.
-static U0 copy_forward(U8* d, const U8* s, size_t n) {
+static inline __attribute__((always_inline)) U0 copy_forward(U8* d, const U8* s, size_t n) {
     if (n >= 16) {
         while ((U64)d & 7) { *d++ = *s++; n--; }       // d aligned from here on
         U32 off = (U32)((U64)s & 7);
+        size_t bulk = n & ~(size_t)7;
+        Word* dw = (Word*)d;
+        Word* end = (Word*)(d + bulk);
         if (off == 0) {
-            for (; n >= 8; n -= 8, d += 8, s += 8) *(Word*)d = *(const Word*)s;
+            const Word* sw = (const Word*)s;
+            while (dw != end) *dw++ = *sw++;
         } else {
             // Each aligned source word read holds at least one byte that is
             // copied, so no read reaches past the source's last aligned word.
             const Word* sw = (const Word*)(s - off);
             U32 lo = off * 8, hi = 64 - lo;
             Word w0 = *sw++;
-            for (; n >= 8; n -= 8, d += 8, s += 8) {
+            if ((bulk >> 3) & 1) {                     // an odd word first, then pairs
                 Word w1 = *sw++;
-                *(Word*)d = (w0 >> lo) | (w1 << hi);   // little-endian
+                *dw++ = (w0 >> lo) | (w1 << hi);       // little-endian
                 w0 = w1;
             }
+            while (dw != end) {
+                Word w1 = sw[0], w2 = sw[1];
+                sw += 2;
+                dw[0] = (w0 >> lo) | (w1 << hi);
+                dw[1] = (w1 >> lo) | (w2 << hi);
+                dw += 2;
+                w0 = w2;
+            }
         }
+        d += bulk;
+        s += bulk;
+        n -= bulk;
     }
     while (n--) *d++ = *s++;
 }
