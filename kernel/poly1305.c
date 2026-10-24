@@ -23,6 +23,27 @@ static inline U64 le64(const U8* p) {
     return v;
 }
 
+typedef U64 __attribute__((may_alias)) Word;
+
+// The two little-endian words of a 16-byte block at any address, with
+// aligned loads only (an unaligned access may trap on RISC-V): when m is
+// unaligned, three aligned words are shifted together; each holds at least
+// one byte of the block, so nothing past it is read. The branch depends on
+// the address, not on the key or the data.
+static inline U0 ld_block(const U8* m, U64* t0, U64* t1) {
+    U32 off = (U32)((U64)m & 7);
+    if (off == 0) {
+        *t0 = ((const Word*)m)[0];
+        *t1 = ((const Word*)m)[1];
+    } else {
+        const Word* a = (const Word*)(m - off);
+        U32 lo = off * 8, hi = 64 - lo;
+        U64 w0 = a[0], w1 = a[1], w2 = a[2];
+        *t0 = (w0 >> lo) | (w1 << hi);
+        *t1 = (w1 >> lo) | (w2 << hi);
+    }
+}
+
 static inline U0 st64(U8* p, U64 v) {
     for (U32 i = 0; i < 8; i++) p[i] = (U8)(v >> (8 * i));
 }
@@ -45,7 +66,8 @@ static U0 poly_blocks(Poly* p, const U8* m, size_t n, U64 hibit) {
     U64 r0 = p->r0, r1 = p->r1, r2 = p->r2, s1 = p->s1, s2 = p->s2;
     U64 h0 = p->h0, h1 = p->h1, h2 = p->h2;
     for (; n >= 16; n -= 16, m += 16) {
-        U64 t0 = le64(m), t1 = le64(m + 8);
+        U64 t0, t1;
+        ld_block(m, &t0, &t1);
         h0 += t0 & M44;
         h1 += ((t0 >> 44) | (t1 << 20)) & M44;
         h2 += ((t1 >> 24) & M42) | hibit;
