@@ -86,10 +86,10 @@ YesOS runs on an Orange Pi RV2.
 
 | | |
 |---|---|
-| Image code size (`.text`) | core self-test 392 KiB (all modules; `math` adds 45), Desktop 338 KiB, Security 355 KiB, NAS 760 KiB |
+| Image code size (`.text`) | core self-test 392 KiB (all modules; `math` adds 45), Desktop 339 KiB, Security 355 KiB, NAS 760 KiB |
 | PMP entries used (kernel hart) | 9 of 16 |
 | Floating-point instructions in the image | 0 (`tools/check_no_fp.py`) |
-| Test suites | core 12, NAS 9, Security 1 (64 checks), Desktop 7 (18 + 48 + 23 + 35 + 37 + 30 + 24 checks), all run under QEMU |
+| Test suites | core 12, NAS 9, Security 1 (64 checks), Desktop 8 (18 + 48 + 23 + 35 + 37 + 30 + 24 + 16 checks), all run under QEMU |
 
 ### Experimental work in `yesos-lab`
 
@@ -181,7 +181,7 @@ layout cannot be proven, the key hart can reach a vector instruction outside
 `keyhart_vkey.S`, the trap path can reach one (other than the `vsetvl` that
 restores vtype and vl), or it contains a floating-point instruction or a forbidden
 symbol. Measured code size (`.text`): NAS 760 KiB, Security 355 KiB,
-Desktop 338 KiB.
+Desktop 339 KiB.
 
 In this repository, `make` builds the core self-test image (core + vault +
 packages + dns, `selftest/`) and `make test` runs the core's suites on it:
@@ -280,7 +280,7 @@ cell test             19 checks: verifier rejections, legit work + RPC, and host
 
 **Packages run in cells (module `packages`).** Installed applications (`pkg install <file.ypk>`, `pkg run <app>`) are untrusted code and always run in a cell — never on hart 0; if no cell is available they refuse to start. A cell program may contain several functions (compiled in two passes with fixed-size PC-relative calls, so forward references work), `extern` declarations are ignored, and the entry is the first top-level call statement (e.g. `PlayHolyChords();`), else `main`. Services available through validated RPCs: `kprintf`/`print`, `speaker_event`/`beep` (ids 0-15) and `SleepMS`/`sleep` (max 2 s per call); anything else is a compile error. Package runs have a 30 s watchdog. The installer treats the file as hostile: sizes are checked against the file (64-bit arithmetic, 16 MiB cap), text fields are forced to be NUL-terminated, names are restricted to `[A-Za-z0-9_.-]` (no `/`), the entry point must be one of the package files, and files are no longer copied into the RamFS namespace. `python3 tools/test_packages.py` installs and runs HolySynth, a multi-function program, hostile packages (kernel read, kernel call, infinite loop) and a malformed package.
 
-**Graphics.** A cell still owns a private 320x240 32bpp canvas inside its data arena (`gfx_clear`, `gfx_rect`, `gfx_plot` run in the cell runtime with clipping; `gfx_text` is a validated RPC; `gfx_present()` publishes a frame). Without a display, presented frames are only counted; showing them is a job for YesOS Desktop.
+**Graphics.** A cell still owns a private 320x240 32bpp canvas inside its data arena (`gfx_clear`, `gfx_rect`, `gfx_plot` run in the cell runtime with clipping; `gfx_text` is a validated RPC; `gfx_present()` publishes a frame). Without a display, presented frames are only counted. A product with one shows them: `cell_set_app_hooks` hands it each presented frame of an app (the canvas read while the cell waits for the RPC, so the frame is whole) and its end; `cell_app_input` queues key and pointer events that the app reads with `input()`; `cell_app_stop` ends it. An app's `SleepMS` does not hold hart 0: its RPC completes at a later poll. YesOS Desktop runs apps in windows this way.
 
 Console HolyQ (`run <file.HQ>`) still runs on hart 0 by design.
 
