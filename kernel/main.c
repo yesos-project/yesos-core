@@ -25,6 +25,10 @@
 #include "vault.h"
 #include "netcfg.h"
 #include "product.h"
+#ifdef YESOS_WITH_CHACHA
+#include "chacha20.h"
+U0 cc20_shell_register(U0);  // kernel/chacha20_shell.c
+#endif
 #ifdef YESOS_WITH_MATH
 #include "yesmath.h"
 U0 ym_shell_register(U0);    // math/ym_shell.c
@@ -81,6 +85,10 @@ U0 KernelMain(U0) {
     integrity_arm();
 
     // 11. Packages, LAN firewall of the stack, static address, product services, console PIN
+#ifdef YESOS_WITH_CHACHA
+    cc20_init();                // vector version if this hart has V
+    cc20_shell_register();
+#endif
 #ifdef YESOS_WITH_MATH
     ym_init();                  // vector versions if this hart has V (mstatus.VS is on since boot)
     ym_shell_register();

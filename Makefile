@@ -6,7 +6,7 @@
 # =============================================================================
 PRODUCT = selftest
 CORE = .
-CORE_MODULES = vault packages dns gfx lineedit math
+CORE_MODULES = vault packages dns gfx lineedit math chacha
 PRODUCT_C_SRCS = selftest/product_selftest.c
 RUST_DIR = selftest/rust
 DISK_MB = 64

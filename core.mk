@@ -7,6 +7,7 @@
 #   CORE_MODULES     optional core modules it needs: vault packages dns
 #                    gfx (font, cell text) lineedit (console line editing)
 #                    math (yesmath: integer math, scalar + RVV, `math` command)
+#                    chacha (ChaCha20 keystream, scalar + RVV, `chacha` command)
 #   FORBIDDEN_SYMBOLS  symbol prefixes the image must not contain (optional;
 #                    the symbols of unselected modules are always forbidden)
 #   CORE             path of the core (default: core, the git submodule)
@@ -64,6 +65,8 @@ CORE_lineedit_SRCS =                                                        # co
 CORE_vault_SRCS    = $(CORE)/kernel/vault.c $(CORE)/kernel/vault_shell.c   # encrypted /vault, key in the key hart
 CORE_packages_SRCS = $(CORE)/kernel/app_registry.c $(CORE)/kernel/ypkg.c   # .ypk apps run in PMP cells
 CORE_dns_SRCS      = $(CORE)/kernel/dnsblock.c                              # DNS filter (engine in Rust)
+CORE_chacha_SRCS   = $(addprefix $(CORE)/kernel/, chacha20.c chacha20_rvv.c chacha20_selftest.c \
+                     chacha20_shell.c)   # ChaCha20 keystream, scalar + RVV
 CORE_math_SRCS     = $(addprefix $(CORE)/math/, ym_math.c ym_rvv.c ym_dispatch.c ym_tables.c \
                      ym_selftest.c ym_shell.c)                              # yesmath (tables 36 KiB)
 
@@ -71,6 +74,7 @@ CORE_math_SRCS     = $(addprefix $(CORE)/math/, ym_math.c ym_rvv.c ym_dispatch.c
 FORBIDDEN_SYMBOLS += $(if $(filter gfx,$(CORE_MODULES)),,font_ g_font_)
 FORBIDDEN_SYMBOLS += $(if $(filter lineedit,$(CORE_MODULES)),,ledit_)
 FORBIDDEN_SYMBOLS += $(if $(filter math,$(CORE_MODULES)),,ym_)
+FORBIDDEN_SYMBOLS += $(if $(filter chacha,$(CORE_MODULES)),,cc20_)
 
 C_SRCS = $(CORE_C_SRCS) $(foreach mod,$(CORE_MODULES),$(CORE_$(mod)_SRCS)) $(PRODUCT_C_SRCS)
 CFLAGS += $(foreach mod,$(CORE_MODULES),-DYESOS_WITH_$(shell echo $(mod) | tr a-z A-Z))
