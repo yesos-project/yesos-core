@@ -86,10 +86,10 @@ YesOS runs on an Orange Pi RV2.
 
 | | |
 |---|---|
-| Image code size (`.text`) | core self-test 392 KiB (all modules; `math` adds 45), Desktop 339 KiB, Security 355 KiB, NAS 760 KiB |
+| Image code size (`.text`) | core self-test 392 KiB (all modules; `math` adds 45), Desktop 343 KiB, Security 355 KiB, NAS 760 KiB |
 | PMP entries used (kernel hart) | 9 of 16 |
 | Floating-point instructions in the image | 0 (`tools/check_no_fp.py`) |
-| Test suites | core 12, NAS 9, Security 1 (64 checks), Desktop 8 (18 + 48 + 23 + 35 + 37 + 30 + 24 + 16 checks), all run under QEMU |
+| Test suites | core 12, NAS 9, Security 1 (64 checks), Desktop 9 (18 + 48 + 23 + 35 + 37 + 30 + 24 + 16 + 13 checks), all run under QEMU |
 
 ### Experimental work in `yesos-lab`
 
@@ -181,7 +181,7 @@ layout cannot be proven, the key hart can reach a vector instruction outside
 `keyhart_vkey.S`, the trap path can reach one (other than the `vsetvl` that
 restores vtype and vl), or it contains a floating-point instruction or a forbidden
 symbol. Measured code size (`.text`): NAS 760 KiB, Security 355 KiB,
-Desktop 339 KiB.
+Desktop 343 KiB.
 
 In this repository, `make` builds the core self-test image (core + vault +
 packages + dns, `selftest/`) and `make test` runs the core's suites on it:
