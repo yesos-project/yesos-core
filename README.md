@@ -86,7 +86,7 @@ YesOS runs on an Orange Pi RV2.
 
 | | |
 |---|---|
-| Image code size (`.text`) | core self-test 388 KiB (all modules; `math` adds 45), Desktop 338 KiB, Security 355 KiB, NAS 756 KiB |
+| Image code size (`.text`) | core self-test 392 KiB (all modules; `math` adds 45), Desktop 338 KiB, Security 355 KiB, NAS 756 KiB |
 | PMP entries used (kernel hart) | 9 of 16 |
 | Floating-point instructions in the image | 0 (`tools/check_no_fp.py`) |
 | Test suites | core 12, NAS 9, Security 1 (64 checks), Desktop 7 (18 + 48 + 23 + 35 + 37 + 30 + 24 checks), all run under QEMU |
@@ -152,7 +152,7 @@ include core/core.mk                # yesos.elf: compile, link, prove
 | `gfx` | the 8x16 font and the cells' text call (refused without it) | Desktop |
 | `lineedit` | console line editing and history (without it: type and backspace only) | Desktop |
 | `math` | yesmath: integer math (log/exp/sqrt, sin, atan2), audio DSP, blur, memcpy; scalar and RVV versions with identical results; `math` command ([`math/README.md`](math/README.md)) | Desktop |
-| `chacha` | ChaCha20 keystream (RFC 8439), scalar and RVV (up to 8 blocks per pass, one per vector lane; vector registers cleared afterwards); `chacha` command; `tools/test_chacha.py` checks it against the RFC, OpenSSL and the kernel | NAS (its TLS) |
+| `chacha` | ChaCha20 keystream (RFC 8439), scalar and RVV (up to 8 blocks per pass, one per vector lane; vector registers cleared afterwards), and Poly1305 with 64-bit limbs (constant time); `chacha` command; `tools/test_chacha.py` checks both against the RFC, OpenSSL and the kernel | NAS (its TLS) |
 
 A product gets only what it names, and less code is less attack surface:
 NAS and Security have no font, no line editor and none of the Desktop's
