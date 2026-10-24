@@ -36,7 +36,7 @@ selects only the parts it needs, so each image contains nothing else:
 
 | Area | Files |
 | :--- | :--- |
-| Boot, traps, memory, SMP | `boot/boot_rv64.S`, `kernel/trap*.{c,S}`, `kernel/memory.c`, `kernel/smp.c`, `kernel/task*.{c,S}` |
+| Boot, traps, memory, SMP | `boot/boot_rv64.S`, `kernel/trap*.{c,S}`, `kernel/memory.c`, `kernel/memops.c` (copies and fills without unaligned accesses: a RISC-V core may trap on one and M-mode has no handler; `tools/test_memops.py` checks them and LZ4 under UBSan's alignment trap), `kernel/smp.c`, `kernel/task*.{c,S}` |
 | PMP and Z3 prover | `kernel/pmp.c`, `tools/pmp_prover.py` (+ `make prover-setup`) |
 | Cells | `kernel/cell.c`, `kernel/cell_rt.S` |
 | Key hart and integrity | `kernel/keyhart.c`, `kernel/keyhart_vkey.S`, `tools/check_keyhart_vector.py`, `tools/image_hash.py` |
@@ -89,7 +89,7 @@ YesOS runs on an Orange Pi RV2.
 | Image code size (`.text`) | core self-test 384 KiB (all modules; `math` adds 45), Desktop 338 KiB, Security 355 KiB, NAS 752 KiB |
 | PMP entries used (kernel hart) | 9 of 16 |
 | Floating-point instructions in the image | 0 (`tools/check_no_fp.py`) |
-| Test suites | core 10, NAS 9, Security 1 (64 checks), Desktop 7 (18 + 48 + 23 + 35 + 37 + 30 + 24 checks), all run under QEMU |
+| Test suites | core 11, NAS 9, Security 1 (64 checks), Desktop 7 (18 + 48 + 23 + 35 + 37 + 30 + 24 checks), all run under QEMU |
 
 ### Experimental work in `yesos-lab`
 
@@ -193,7 +193,7 @@ sudo apt install -y git make clang lld llvm qemu-system-misc python3 python3-ven
 rustup target add riscv64gc-unknown-none-elf
 make prover-setup        # once: Z3 in tools/.venv
 make                     # yesos.elf: links, proves the PMP layout, checks the key hart, hashes the image
-make test                # test_pmp, test_cells, test_integrity, test_packages, test_dns, test_timer, test_pci, test_line_edit, test_checksum, test_math
+make test                # test_pmp, test_cells, test_integrity, test_packages, test_dns, test_timer, test_pci, test_line_edit, test_checksum, test_math, test_memops
 make run                 # serial console in the terminal (Ctrl-A X to quit)
 ```
 
