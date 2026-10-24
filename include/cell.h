@@ -74,7 +74,19 @@
 #define CELL_RPC_BEEP     2           // a0 = earcon id (0..15); no-op on the NAS
 #define CELL_RPC_SLEEP    3           // a0 = milliseconds (capped)
 #define CELL_RPC_TEXT     4           // a0 = x, a1 = y, a2 = string (in cell data), a3 = color
-#define CELL_RPC_PRESENT  5           // frame done (counted; no local display)
+#define CELL_RPC_PRESENT  5           // frame done (to the product's frame hook, if any)
+#define CELL_RPC_INPUT    6           // next input event (CELL_IN_*), 0 when there is none
+
+// Input events, as returned by input() in a cell program:
+//   1 .. 0x10FFFF                 a typed character (Unicode; Enter 10, Backspace 8, Esc 27)
+//   CELL_IN_UP .. CELL_IN_RIGHT   arrow keys
+//   CELL_IN_PRESS | x << 16 | y   a pointer press at canvas pixel (x, y)
+#define CELL_IN_UP        0x110001
+#define CELL_IN_DOWN      0x110002
+#define CELL_IN_LEFT      0x110003
+#define CELL_IN_RIGHT     0x110004
+#define CELL_IN_PRESS     0x80000000u
+#define CELL_INPUT_QUEUE  16
 
 #ifndef __ASSEMBLER__
 
@@ -105,6 +117,7 @@ typedef enum {
     CELL_RESULT_TIMEOUT,        // killed by the watchdog
     CELL_RESULT_REJECTED,       // compile error or verifier rejection
     CELL_RESULT_UNAVAILABLE,    // no verified cell hart
+    CELL_RESULT_STOPPED,        // stopped by the product (cell_app_stop)
 } CellResultCode;
 
 typedef struct {
@@ -137,6 +150,19 @@ Bool  cell_run_source(const char* source, const I64* args, U32 argc, U32 timeout
 // handled by cell_poll() from the main loop.
 Bool  cell_start_app(const char* source, const char* name, U32 timeout_ms, CellResult* out);
 U0    cell_poll(U0);
+
+// Apps in windows (YesOS Desktop). cell_app_start is cell_start_app that
+// returns the cell index (-1 on failure, out says why). The frame hook runs
+// on hart 0 at each gfx_present of an app, with the canvas (CELL_CANVAS_W x
+// CELL_CANVAS_H, 0x00RRGGBB) valid during the call: the cell waits for the
+// RPC, so the frame is complete. The end hook runs once when the app ends.
+typedef U0 (*CellFrameFn)(U32 cell, const U32* canvas, U32 frame);
+typedef U0 (*CellEndFn)(U32 cell, const CellResult* result);
+U0    cell_set_app_hooks(CellFrameFn frame, CellEndFn end);
+I32   cell_app_start(const char* source, const char* name, U32 timeout_ms, CellResult* out);
+Bool  cell_app_stop(U32 cell);                 // ends it at the next poll: CELL_RESULT_STOPPED
+Bool  cell_app_input(U32 cell, U32 event);     // queues an event; FALSE if not running or full
+Bool  cell_app_running(U32 cell);
 
 U32   cell_available_count(U0);
 U0    cell_print_status(U0);

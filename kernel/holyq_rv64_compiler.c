@@ -534,6 +534,9 @@ static void compile_primary(JITCompiler* c, const char** p) {
                 } else if (StrCmp(ident, "gfx_present") == 0) {
                     rv64_emit_li64(&c->emit, RV_REG_A0 + 7, 5 /* CELL_RPC_PRESENT */);
                     rv64_emit_call(&c->emit, g_cell_target->rpc_addr);
+                } else if (StrCmp(ident, "input") == 0) {
+                    rv64_emit_li64(&c->emit, RV_REG_A0 + 7, 6 /* CELL_RPC_INPUT */);
+                    rv64_emit_call(&c->emit, g_cell_target->rpc_addr);
                 } else {
                     cell_compile_error("kernel function not callable from a cell:", ident);
                 }

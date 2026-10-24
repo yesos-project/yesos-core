@@ -489,11 +489,18 @@ static Bool compile_program(U32 k, const CellFn* fns, U32 n, U64* addrs, U32* si
 typedef struct {
     Bool active;
     Bool async;
+    Bool stop;                          // cell_app_stop asked for it
+    U64  sleep_until;                   // app in SleepMS: its RPC completes then
     U64  t0;
     U32  timeout_ms;
     U32  frames;
     char name[32];
+    U32  input[CELL_INPUT_QUEUE];       // events for input(), oldest first
+    U32  in_head, in_count;
 } CellJob;
+
+static CellFrameFn g_frame_hook;
+static CellEndFn   g_end_hook;
 
 static CellJob g_jobs[CELL_MAX];
 
@@ -546,15 +553,30 @@ static U0 cell_service_rpc(U32 k, CellMailbox* mb) {
     } else if (op == CELL_RPC_SLEEP) {
         U64 ms = mb->rpc_args[0] > 2000 ? 2000 : mb->rpc_args[0];
         U64 s0 = timer_get_uptime_ms();
+        if (g_jobs[k].async) {
+            // An app: hart 0 must keep running the desktop, so the RPC stays
+            // pending and cell_job_service completes it when the time is up.
+            g_jobs[k].sleep_until = s0 + (ms ? ms : 1);
+            return;
+        }
         while (timer_get_uptime_ms() - s0 < ms) __asm__ __volatile__("fence rw, rw" ::: "memory");
         mb->rpc_result = 0;
     } else if (op == CELL_RPC_TEXT) {
         cell_service_text(k, mb);
     } else if (op == CELL_RPC_PRESENT) {
-        // The NAS has no local display: frames are counted, the canvas stays
-        // private to the cell (a remote viewer can be added later).
+        // Counted; a product with a display (Desktop) shows the canvas through
+        // its frame hook, called while the cell waits for this RPC.
         g_jobs[k].frames++;
+        if (g_frame_hook && g_jobs[k].async) g_frame_hook(k, cell_canvas(k), g_jobs[k].frames);
         mb->rpc_result = g_jobs[k].frames;
+    } else if (op == CELL_RPC_INPUT) {
+        CellJob* j = &g_jobs[k];
+        mb->rpc_result = 0;
+        if (j->in_count) {
+            mb->rpc_result = j->input[j->in_head];
+            j->in_head = (j->in_head + 1) % CELL_INPUT_QUEUE;
+            j->in_count--;
+        }
     } else {
         mb->rpc_result = (U64)-1;
     }
@@ -644,6 +666,9 @@ static Bool cell_job_start(const char* source, const char* entry, const I64* arg
     j->t0 = timer_get_uptime_ms();
     j->timeout_ms = timeout_ms;
     j->frames = 0;
+    j->stop = FALSE;
+    j->sleep_until = 0;
+    j->in_head = j->in_count = 0;
     StrNCpy(j->name, name ? name : "cell program", sizeof(j->name) - 1);
     cell_release(k);
     *k_out = k;
@@ -656,6 +681,14 @@ static Bool cell_job_service(U32 k, CellResult* out, U32 rpc_budget) {
     CellMailbox* mb = cell_mb(k);
     CellJob* j = &g_jobs[k];
     for (U32 i = 0; i < rpc_budget; i++) {
+        if (j->sleep_until) {                       // an app's SleepMS
+            if (timer_get_uptime_ms() < j->sleep_until) break;
+            j->sleep_until = 0;
+            mb->rpc_result = 0;
+            __asm__ __volatile__("fence rw, rw" ::: "memory");
+            mb->rpc_state = CELL_RPC_DONE;
+            continue;
+        }
         __asm__ __volatile__("fence rw, rw" ::: "memory");
         if (mb->rpc_state != CELL_RPC_REQUEST) break;
         cell_service_rpc(k, mb);
@@ -705,10 +738,38 @@ Bool cell_run_program(const char* source, const char* entry, const I64* args, U3
     return out->code == CELL_RESULT_OK;
 }
 
-Bool cell_start_app(const char* source, const char* name, U32 timeout_ms, CellResult* out) {
+I32 cell_app_start(const char* source, const char* name, U32 timeout_ms, CellResult* out) {
     U32 k = 0;
-    if (!cell_job_start(source, NULL, NULL, 0, timeout_ms, name, TRUE, out, &k)) return FALSE;
+    if (!cell_job_start(source, NULL, NULL, 0, timeout_ms, name, TRUE, out, &k)) return -1;
     kprintf("--- [ %s started on cell hart %u ] ---\n", g_jobs[k].name, CELL_FIRST_HART + k);
+    return (I32)k;
+}
+
+Bool cell_start_app(const char* source, const char* name, U32 timeout_ms, CellResult* out) {
+    return cell_app_start(source, name, timeout_ms, out) >= 0;
+}
+
+U0 cell_set_app_hooks(CellFrameFn frame, CellEndFn end) {
+    g_frame_hook = frame;
+    g_end_hook = end;
+}
+
+Bool cell_app_running(U32 cell) {
+    return cell < CELL_MAX && g_jobs[cell].active && g_jobs[cell].async;
+}
+
+Bool cell_app_stop(U32 cell) {
+    if (!cell_app_running(cell)) return FALSE;
+    g_jobs[cell].stop = TRUE;
+    return TRUE;
+}
+
+Bool cell_app_input(U32 cell, U32 event) {
+    if (!cell_app_running(cell) || event == 0) return FALSE;
+    CellJob* j = &g_jobs[cell];
+    if (j->in_count >= CELL_INPUT_QUEUE) return FALSE;
+    j->input[(j->in_head + j->in_count) % CELL_INPUT_QUEUE] = event;
+    j->in_count++;
     return TRUE;
 }
 
@@ -718,14 +779,20 @@ U0 cell_poll(U0) {
         if (!j->active || !j->async) continue;
         CellResult r;
         MemSet(&r, 0, sizeof(r));
-        if (!cell_job_service(k, &r, 64)) continue;
+        if (j->stop) {
+            r.code = CELL_RESULT_STOPPED;
+            StrNCpy(r.reason, "stopped by the user", sizeof(r.reason) - 1);
+        } else if (!cell_job_service(k, &r, 64)) {
+            continue;
+        }
         if (r.code == CELL_RESULT_OK) {
             kprintf("--- [ %s finished in its cell (result %d, %u frames) ] ---\n", j->name, (I32)r.value, j->frames);
         } else {
             kprintf("--- [ %s stopped: %s ] ---\n", j->name, r.reason);
-            speaker_event(BEEP_WARN);
+            if (r.code != CELL_RESULT_STOPPED) speaker_event(BEEP_WARN);
         }
         cell_job_finish(k);
+        if (g_end_hook) g_end_hook(k, &r);
     }
 }
 
