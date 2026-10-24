@@ -385,7 +385,7 @@ Network     net  ping [ip]  net bench  net ip <a.b.c.d/nn> [gw <ip>] | default  
 Isolation   pmp  pmp test  cell  cell test  cell run <f.HQ> [n]  keyhart test  integrity
 HolyQ       run <f.HQ>  jit <code>  jit bench|rvv|disasm <fn>   (console: full privileges)
 System      sysinfo  mem  hardening  smp  uptime  tasks  ata  pci  clear  reboot  poweroff
-Modules     vault [status|init|unlock|lock|passwd]   pkg [list|install|run|remove]   math [test]
+Modules     vault [status|init|unlock|lock|passwd]   pkg [list|install|run|remove]   math [test|use scalar|use vector]
             dns [status|log|on|off|flush|test <d>|allow|block|unallow|unblock <d>|upstream <ip>...|auto|doh|list add|on|off|delete]
 ```
 

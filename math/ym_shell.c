@@ -1,5 +1,7 @@
 // Console command of the optional core module "math" (yesmath).
 //   math         which versions are in use (vector if the hart has V)
+//   math use scalar|vector   forces one or the other (vector needs V), e.g.
+//                to compare them; results are identical either way
 //   math test    runs the self-check (ym_selftest.c): one line per function
 //                with the hash of its outputs;
 //                each vector result must equal the scalar one.
@@ -43,7 +45,10 @@ static U0 ym_status(U0) {
         __asm__ __volatile__("csrr %0, vlenb" : "=r"(vlenb));
         kprintf("yesmath: vector versions in use (RVV 1.0, VLEN %u bits)\n", vlenb * 8);
     } else {
-        kprintf("yesmath: scalar versions in use (this hart has no V extension)\n");
+        U64 misa;
+        __asm__ __volatile__("csrr %0, misa" : "=r"(misa));
+        kprintf("yesmath: scalar versions in use (%s)\n", (misa >> ('V' - 'A')) & 1 ?
+                "forced; the hart has V: math use vector" : "this hart has no V extension");
     }
 }
 
@@ -60,8 +65,14 @@ static Bool ym_shell_run(const char* cmd) {
             kprintf("[RESULT] yesmath self-check OK: %u vector results identical to the scalar ones\n", (U64)g_compared);
         else
             kprintf("[RESULT] yesmath self-check OK: scalar versions only\n");
+    } else if (StrCmp(cmd, "math use scalar") == 0) {
+        ym_use_rvv(0);
+        ym_status();
+    } else if (StrCmp(cmd, "math use vector") == 0) {
+        ym_init();                                  // vector only if the hart has V
+        ym_status();
     } else if (StrNCmp(cmd, "math ", 5) == 0) {
-        kprintf("Usage: math [test]\n");
+        kprintf("Usage: math [test | use scalar | use vector]\n");
     } else {
         return FALSE;
     }
@@ -71,6 +82,7 @@ static Bool ym_shell_run(const char* cmd) {
 static U0 ym_shell_help(U0) {
     kprintf("  Math (yesmath)\n");
     kprintf("    math [test]   versions in use; self-check scalar vs vector\n");
+    kprintf("    math use scalar|vector   force one or the other (results are identical)\n");
 }
 
 U0 ym_shell_register(U0) {

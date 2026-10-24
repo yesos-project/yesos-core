@@ -89,7 +89,7 @@ contest).
 
 ## What the test checks
 
-`tools/test_math.py` (72 checks):
+`tools/test_math.py` (74 checks):
 
 1. **Host build** (`-DYM_HOST`, ctypes): the accuracy table above, against
    exact math; gain, mix, biquad (outputs and states), FIR, blur, memcpy and
