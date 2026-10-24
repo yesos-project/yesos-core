@@ -86,10 +86,10 @@ YesOS runs on an Orange Pi RV2.
 
 | | |
 |---|---|
-| Image code size (`.text`) | core self-test 384 KiB (all modules; `math` adds 45), Desktop 289 KiB, Security 355 KiB, NAS 752 KiB |
+| Image code size (`.text`) | core self-test 384 KiB (all modules; `math` adds 45), Desktop 338 KiB, Security 355 KiB, NAS 752 KiB |
 | PMP entries used (kernel hart) | 9 of 16 |
 | Floating-point instructions in the image | 0 (`tools/check_no_fp.py`) |
-| Test suites | core 10, NAS 9, Security 1 (64 checks), Desktop 7 (17 + 38 + 23 + 35 + 35 + 30 + 24 checks), all run under QEMU |
+| Test suites | core 10, NAS 9, Security 1 (64 checks), Desktop 7 (18 + 38 + 23 + 35 + 37 + 30 + 24 checks), all run under QEMU |
 
 ### Experimental work in `yesos-lab`
 
@@ -151,7 +151,7 @@ include core/core.mk                # yesos.elf: compile, link, prove
 | `dns` | DNS filter (engine in Rust) | Security |
 | `gfx` | the 8x16 font and the cells' text call (refused without it) | Desktop |
 | `lineedit` | console line editing and history (without it: type and backspace only) | Desktop |
-| `math` | yesmath: integer math (log/exp/sqrt, sin, atan2), audio DSP, blur, memcpy; scalar and RVV versions with identical results; `math` command ([`math/README.md`](math/README.md)) | none yet (core self-test) |
+| `math` | yesmath: integer math (log/exp/sqrt, sin, atan2), audio DSP, blur, memcpy; scalar and RVV versions with identical results; `math` command ([`math/README.md`](math/README.md)) | Desktop |
 
 A product gets only what it names, and less code is less attack surface:
 NAS and Security have no font, no line editor and none of the Desktop's
@@ -180,7 +180,7 @@ layout cannot be proven, the key hart can reach a vector instruction outside
 `keyhart_vkey.S`, the trap path can reach one (other than the `vsetvl` that
 restores vtype and vl), or it contains a floating-point instruction or a forbidden
 symbol. Measured code size (`.text`): NAS 752 KiB, Security 355 KiB,
-Desktop 289 KiB.
+Desktop 338 KiB.
 
 In this repository, `make` builds the core self-test image (core + vault +
 packages + dns, `selftest/`) and `make test` runs the core's suites on it:

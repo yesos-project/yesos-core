@@ -6,7 +6,7 @@ a scalar version (RV64 with Zbb) and, where it pays, an RVV 1.0 version
 picked at run time; both give **identical results**. No floating point.
 
 A product selects it with `CORE_MODULES += math`; without it, `ym_` symbols
-are forbidden in the image. Today only the core self-test image has it.
+are forbidden in the image. YesOS Desktop uses it (pixel rows, the audio ring).
 
 ```bash
 python3 tools/test_math.py                 # host checks + the kernel's `math test`
@@ -117,4 +117,4 @@ contest).
   proves the trap path never uses a vector register.
 - Accuracy is checked on the ranges listed in `yesmath.h`, not proven for
   every input.
-- Not yet used by any product.
+- Used by YesOS Desktop only; NAS and Security do not link it.
